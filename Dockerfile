@@ -1,6 +1,7 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY tools/ ./tools/
+COPY public/ ./public/
 RUN node tools/build.js
 
 FROM nginx:alpine

@@ -258,7 +258,7 @@ function stepHTML(g, all, word, index) {
   }
   const note = index === 0 ? 'départ' : '';
   const cur = index === steps(g);
-  return `<li class="step${cur ? ' current' : ''}"><span class="num">${index}</span><span class="word">${letters}</span>${note ? `<span class="note">${note}</span>` : ''}</li>`;
+  return `<li class="step${cur ? ' current' : ''}"><span class="num">${index}</span><span class="word">${letters}</span><span class="note">${note}</span></li>`;
 }
 
 function buildSlots() {
