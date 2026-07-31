@@ -37,9 +37,11 @@
 
         <form id="guess-form" class="guess-form" autocomplete="off">
           <label class="sr-only" for="guess">Votre mot</label>
-          <input id="guess" class="guess-input" type="text" maxlength="5"
-                 inputmode="text" autocapitalize="off" spellcheck="false"
-                 placeholder="_____" aria-label="Votre mot" autocomplete="off">
+          <div id="input-row" class="word-input" aria-label="Votre mot">
+            <input id="guess" class="guess-input" type="text" maxlength="5"
+                   inputmode="text" autocapitalize="off" spellcheck="false"
+                   aria-label="Votre mot" autocomplete="off">
+          </div>
           <button id="submit" class="btn btn-primary" type="submit">Tentative</button>
         </form>
         <p id="message" class="message" role="status" aria-live="assertive"></p>

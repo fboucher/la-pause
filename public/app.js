@@ -22,6 +22,8 @@ const els = {
   ladder: $('#ladder'),
   form: $('#guess-form'),
   input: $('#guess'),
+  inputRow: $('#input-row'),
+  slots: [],
   submit: $('#submit'),
   message: $('#message'),
   undo: $('#undo'),
@@ -246,19 +248,38 @@ function changedIndex(prev, word) {
 }
 
 function stepHTML(g, all, word, index) {
-  let letters;
-  if (index > 0) {
-    const ci = changedIndex(all[index - 1], word);
-    letters = '';
-    for (let i = 0; i < word.length; i++) {
-      letters += `<span class="${i === ci ? 'changed' : ''}">${word[i]}</span>`;
-    }
-  } else {
-    letters = word;
+  const ci = index > 0 ? changedIndex(all[index - 1], word) : -1;
+  let letters = '';
+  for (let i = 0; i < word.length; i++) {
+    const cls = ['letter'];
+    if (i === ci) cls.push('changed');
+    if (index > 0 && word[i] === data.target[i]) cls.push('correct');
+    letters += `<span class="${cls.join(' ')}">${word[i]}</span>`;
   }
   const note = index === 0 ? 'départ' : '';
   const cur = index === steps(g);
   return `<li class="step${cur ? ' current' : ''}"><span class="num">${index}</span><span class="word">${letters}</span>${note ? `<span class="note">${note}</span>` : ''}</li>`;
+}
+
+function buildSlots() {
+  els.slots = [];
+  for (let i = 0; i < 5; i++) {
+    const s = document.createElement('span');
+    s.className = 'slot';
+    s.setAttribute('aria-hidden', 'true');
+    els.inputRow.insertBefore(s, els.input);
+    els.slots.push(s);
+  }
+}
+
+function renderInput() {
+  const val = normalize(els.input.value);
+  els.slots.forEach((s, i) => {
+    const ch = val[i] || '';
+    s.textContent = ch;
+    s.classList.toggle('filled', !!ch);
+    s.classList.toggle('correct', !!ch && ch === data.target[i]);
+  });
 }
 
 function renderLadder() {
@@ -269,20 +290,25 @@ function renderLadder() {
 
 function renderMeta() {
   const g = game();
-  const par = parOf(g.start);
-  const n = steps(g);
   const label = mode === 'daily' ? `Puzzle n°${puzzleNumber()}` : 'Mode illimité';
-  const done = `${n} coup${n > 1 ? 's' : ''}`;
-  els.meta.innerHTML = `<span>${label}</span><span class="par">${done} · par ${par}</span>`;
+  if (!g.solved) {
+    els.meta.innerHTML = `<span>${label}</span>`;
+    return;
+  }
+  const n = steps(g);
+  const par = parOf(g.start);
+  els.meta.innerHTML = `<span>${label}</span><span class="par">${n} coup${n > 1 ? 's' : ''} · par ${par}</span>`;
 }
 
 function renderControls() {
-  const locked = isSolved() && mode === 'daily';
+  const solved = isSolved();
+  const locked = solved && mode === 'daily';
   els.undo.disabled = steps(game()) === 0 || locked;
   els.newGame.style.display = mode === 'free' ? '' : 'none';
-  els.share.style.display = isSolved() ? '' : 'none';
-  els.submit.disabled = locked;
-  els.input.disabled = locked;
+  els.share.style.display = solved ? '' : 'none';
+  els.submit.disabled = solved;
+  els.input.disabled = solved;
+  els.inputRow.hidden = solved;
 }
 
 function renderSolved() {
@@ -329,6 +355,7 @@ function renderDist() {
 function renderAll() {
   renderMeta();
   renderLadder();
+  renderInput();
   renderSolved();
   renderControls();
   renderStats();
@@ -345,6 +372,7 @@ function commitMove(word) {
   renderLadder();
   renderControls();
   els.input.value = '';
+  renderInput();
   els.input.focus();
 }
 
@@ -364,9 +392,9 @@ function submitGuess(ev) {
   if (!res.ok) {
     els.message.textContent = res.msg;
     els.message.className = 'message error';
-    els.input.classList.remove('shake');
-    void els.input.offsetWidth;
-    els.input.classList.add('shake');
+    els.inputRow.classList.remove('shake');
+    void els.inputRow.offsetWidth;
+    els.inputRow.classList.add('shake');
     return;
   }
   els.message.textContent = '';
@@ -426,11 +454,13 @@ async function init() {
   els.shareSolved.addEventListener('click', copyShare);
   els.tabDaily.addEventListener('click', () => switchMode('daily'));
   els.tabFree.addEventListener('click', () => switchMode('free'));
-  els.input.addEventListener('keydown', () => {
+  els.input.addEventListener('input', () => {
+    renderInput();
     els.message.textContent = '';
     els.message.className = 'message';
   });
 
+  buildSlots();
   renderAll();
 }
 

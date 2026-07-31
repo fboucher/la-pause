@@ -1,7 +1,7 @@
 # La pause
 
-Un clone francophone de [Poople](https://poople.io), l'échelle de mots, sur le
-thème de la pause café. « Votre pause café ». Objectif : rejoindre **PAUSE**.
+Une échelle de mots, sur le thème de la pause café. « Votre pause café ».
+Objectif : rejoindre **PAUSE**.
 
 ## Règles
 

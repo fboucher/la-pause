@@ -152,18 +152,16 @@ h1 {
   padding: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   min-height: 40px;
 }
 
 .ladder .step {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  border-radius: 12px;
-  background: #F4EDDD;
-  border: 1px solid var(--line);
+  justify-content: center;
+  padding: 3px 0;
   animation: rise 0.28s ease-out;
 }
 
@@ -172,18 +170,11 @@ h1 {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.ladder .step.current {
-  background: var(--espresso);
-  border-color: var(--espresso);
-  color: var(--card);
-  font-weight: 700;
-}
-
-.ladder .step.current .changed {
-  color: #FFD9A8;
-}
-
 .ladder .step .num {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 0.72rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -193,22 +184,60 @@ h1 {
 .ladder .step.current .num { color: var(--latte); }
 
 .ladder .step .word {
-  font-size: 1.25rem;
-  letter-spacing: 0.06em;
-  font-variant: small-caps;
-  font-weight: 600;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
 }
 
-.ladder .step .changed {
-  color: var(--accent);
-  border-bottom: 2px solid var(--accent);
+.ladder .step .letter {
+  width: 40px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--cream);
+  font-size: 1.35rem;
   font-weight: 700;
+  text-transform: uppercase;
 }
 
-.ladder .step.current .changed { border-bottom-color: #FFD9A8; }
+.ladder .step .letter.changed {
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.ladder .step .letter.correct {
+  background: var(--coffee);
+  border-color: var(--coffee);
+  color: var(--card);
+  text-decoration: none;
+}
+
+.ladder .step.current .letter {
+  border-color: var(--espresso);
+  background: #FBF6EA;
+}
+
+.ladder .step.current .letter.changed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ladder .step.current .letter.correct {
+  background: var(--coffee);
+  border-color: var(--coffee);
+  color: var(--card);
+}
 
 .ladder .step .note {
-  margin-left: auto;
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 0.75rem;
   color: var(--muted);
 }
@@ -219,38 +248,68 @@ h1 {
 
 .guess-form {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.word-input {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-radius: 14px;
+}
+
+.word-input:focus-within {
+  background: rgba(111, 78, 55, 0.08);
+}
+
+.word-input .slot {
+  width: 44px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--latte);
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  pointer-events: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.word-input .slot.filled {
+  border-style: solid;
+  border-color: var(--coffee);
+}
+
+.word-input .slot.correct {
+  background: var(--coffee);
+  border-color: var(--coffee);
+  color: var(--card);
 }
 
 .guess-input {
-  flex: 1;
-  min-width: 0;
-  padding: 12px 14px;
-  border: 2px solid var(--line);
-  border-radius: 12px;
-  background: var(--cream);
-  color: var(--espresso);
-  font: inherit;
-  font-size: 1.3rem;
-  letter-spacing: 0.18em;
-  text-transform: lowercase;
-  text-align: center;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  z-index: 2;
+  cursor: text;
+  font-size: 1rem;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.guess-input:focus {
-  border-color: var(--coffee);
-  box-shadow: 0 0 0 3px rgba(111, 78, 55, 0.18);
-}
-
-.guess-input::placeholder { letter-spacing: 0.18em; color: #CFC2AE; }
-
-.guess-input:disabled {
-  background: #F0E9D9;
-  color: var(--muted);
-  cursor: not-allowed;
-}
+.guess-input:disabled { cursor: not-allowed; }
 
 .btn {
   padding: 12px 16px;
