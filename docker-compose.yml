@@ -1,0 +1,16 @@
+services:
+  web:
+    build: .
+    image: la-pause:latest
+    container_name: la-pause-web
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  dev:
+    image: nginx:alpine
+    container_name: la-pause-dev
+    ports:
+      - "8081:80"
+    volumes:
+      - ./public:/usr/share/nginx/html:ro

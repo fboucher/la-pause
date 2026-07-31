@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#F7F1E4">
+  <title>La pause — votre pause café</title>
+  <meta name="description" content="La pause : une échelle de mots. Partez d'un mot et atteignez PAUSE en changeant une lettre à chaque coup.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M7 12h18v7a6 6 0 0 1-6 6h-6a6 6 0 0 1-6-6z' fill='%236F4E37'/%3E%3Cpath d='M25 13h3a3 3 0 0 1 0 6h-3' fill='none' stroke='%236F4E37' stroke-width='2.5'/%3E%3Crect x='6' y='26' width='20' height='2.5' rx='1.25' fill='%23A6845F'/%3E%3Cpath d='M13 7c0-3 3-3 3-6M19 7c0-3 3-3 3-6' stroke='%23BFA794' stroke-width='1.8' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <svg class="cup" viewBox="0 0 120 84" aria-hidden="true">
+        <path class="steam s1" d="M42 24 q6 -12 0 -22"/>
+        <path class="steam s2" d="M60 27 q6 -12 0 -22"/>
+        <path class="steam s3" d="M78 24 q-6 -12 0 -22"/>
+        <path d="M30 40 h62 v12 a9 9 0 0 1 -9 9 H39 a9 9 0 0 1 -9 -9 Z" fill="#6F4E37"/>
+        <path d="M92 42 h11 a8 8 0 0 1 0 16 H92" fill="none" stroke="#6F4E37" stroke-width="4" stroke-linecap="round"/>
+        <path d="M28 63 h66" stroke="#A6845F" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <h1>La pause</h1>
+      <p class="tagline">votre pause café</p>
+    </header>
+
+    <nav class="tabs" aria-label="Mode de jeu">
+      <button id="tab-daily" class="tab is-active" type="button">Quotidienne</button>
+      <button id="tab-free" class="tab" type="button">Illimitée</button>
+    </nav>
+
+    <main id="app">
+      <section class="card">
+        <div id="puzzle-meta" class="puzzle-meta"></div>
+
+        <ol id="ladder" class="ladder" aria-live="polite"></ol>
+
+        <form id="guess-form" class="guess-form" autocomplete="off">
+          <label class="sr-only" for="guess">Votre mot</label>
+          <input id="guess" class="guess-input" type="text" maxlength="5"
+                 inputmode="text" autocapitalize="off" spellcheck="false"
+                 placeholder="_____" aria-label="Votre mot" autocomplete="off">
+          <button id="submit" class="btn btn-primary" type="submit">Tentative</button>
+        </form>
+        <p id="message" class="message" role="status" aria-live="assertive"></p>
+
+        <div id="controls" class="controls">
+          <button id="undo" class="btn" type="button">Annuler</button>
+          <button id="new-game" class="btn" type="button">Nouvelle partie</button>
+          <button id="share" class="btn" type="button">Partager</button>
+        </div>
+      </section>
+
+      <section id="solved" class="card solved" hidden>
+        <h2 id="solved-title" class="solved-title"></h2>
+        <p id="solved-text" class="solved-text"></p>
+        <button id="share-solved" class="btn btn-primary" type="button">Partager</button>
+        <p id="countdown" class="countdown"></p>
+      </section>
+
+      <section class="card stats" aria-label="Statistiques">
+        <h2 class="stats-title">Statistiques</h2>
+        <dl class="stats-grid">
+          <div><dt>Victoires</dt><dd id="stat-wins">0</dd></div>
+          <div><dt>Série</dt><dd id="stat-streak">0</dd></div>
+          <div><dt>Meilleure série</dt><dd id="stat-best">0</dd></div>
+          <div><dt>Réussite</dt><dd id="stat-rate">0 %</dd></div>
+        </dl>
+        <div id="dist-bars" class="dist-bars" aria-label="Répartition des coups"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Lexique : liste de mots français ouverte (<a href="https://github.com/words/an-array-of-french-words" target="_blank" rel="noopener noreferrer">an-array-of-french-words</a>), normalisée sans accents.</p>
+      <p>Chaque jour, un nouveau mot pour rejoindre <strong>PAUSE</strong>.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
