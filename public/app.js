@@ -12,7 +12,7 @@ let dailyStart = null;
 
 let mode = 'daily';
 let dailyGame = { start: '', moves: [], solved: false };
-let freeGame = { start: '', moves: [], solved: false };
+let freeGame = { start: '', moves: [], solved: false, hintUsed: false };
 let stats = { wins: 0, streak: 0, best: 0, played: 0, playedDate: null, lastWin: null, dist: {} };
 
 const els = {
@@ -27,6 +27,7 @@ const els = {
   submit: $('#submit'),
   message: $('#message'),
   undo: $('#undo'),
+  hint: $('#hint'),
   newGame: $('#new-game'),
   share: $('#share'),
   solved: $('#solved'),
@@ -115,7 +116,12 @@ function restore() {
       dailyGame = { start: dailyStart, moves: [], solved: false };
     }
     if (saved.free && wordSet.has(saved.free.start)) {
-      freeGame = { start: saved.free.start, moves: [...saved.free.moves], solved: !!saved.free.solved };
+      freeGame = {
+        start: saved.free.start,
+        moves: [...saved.free.moves],
+        solved: !!saved.free.solved,
+        hintUsed: !!saved.free.hintUsed,
+      };
     } else {
       newFreeGame();
     }
@@ -137,7 +143,7 @@ function randomStart() {
 }
 
 function newFreeGame() {
-  freeGame = { start: randomStart(), moves: [], solved: false };
+  freeGame = { start: randomStart(), moves: [], solved: false, hintUsed: false };
 }
 
 function parOf(word) {
@@ -309,6 +315,8 @@ function renderControls() {
   els.submit.disabled = solved;
   els.input.disabled = solved;
   els.inputRow.hidden = solved;
+  els.hint.style.display = mode === 'free' ? '' : 'none';
+  els.hint.disabled = solved || game().hintUsed;
 }
 
 function renderSolved() {
@@ -435,6 +443,33 @@ function startFree() {
   els.input.focus();
 }
 
+function hintPosition() {
+  const w = lastWord();
+  const d = parOf(w);
+  for (let i = 0; i < w.length; i++) {
+    for (let c = 97; c < 123; c++) {
+      const ch = String.fromCharCode(c);
+      if (ch === w[i]) continue;
+      const cand = w.slice(0, i) + ch + w.slice(i + 1);
+      if (wordSet.has(cand) && parOf(cand) === d - 1) return i + 1;
+    }
+  }
+  return null;
+}
+
+function useHint() {
+  if (mode !== 'free' || isSolved() || game().hintUsed) return;
+  const pos = hintPosition();
+  if (pos == null) {
+    flashMessage('Aucun conseil disponible ici.', 'error');
+    return;
+  }
+  game().hintUsed = true;
+  saveState();
+  renderControls();
+  flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
+}
+
 /* ---------------- init ---------------- */
 
 async function init() {
@@ -449,6 +484,7 @@ async function init() {
 
   els.form.addEventListener('submit', submitGuess);
   els.undo.addEventListener('click', undoMove);
+  els.hint.addEventListener('click', useHint);
   els.newGame.addEventListener('click', startFree);
   els.share.addEventListener('click', copyShare);
   els.shareSolved.addEventListener('click', copyShare);
