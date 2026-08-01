@@ -69,8 +69,17 @@ function main() {
   const hist = {};
   for (const d of dist.values()) hist[d] = (hist[d] || 0) + 1;
 
+  let appVersion = '1.0.0';
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+    if (pkg.version) appVersion = pkg.version;
+  } catch (err) {
+    // fallback
+  }
+
   const payload = {
     version: 1,
+    appVersion,
     target: TARGET,
     generatedAt: new Date().toISOString(),
     stats: {

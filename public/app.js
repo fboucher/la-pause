@@ -1,9 +1,30 @@
 const $ = (sel) => document.querySelector(sel);
 
+// Theme handling
+function getInitialTheme() {
+  const saved = localStorage.getItem('lapause.theme');
+  if (saved) return saved;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('lapause.theme', theme);
+  const metaTheme = $('meta[name="theme-color"]');
+  if (metaTheme) {
+    metaTheme.setAttribute('content', theme === 'dark' ? '#1C130E' : '#F7F1E4');
+  }
+}
+
+setTheme(getInitialTheme());
+
 const TZ = 'America/Toronto';
 const EPOCH_UTC = Date.UTC(2026, 0, 1);
 const STATE_KEY = 'lapause.v1';
 const STATS_KEY = 'lapause.stats.v1';
+
+const isDev = new URLSearchParams(window.location.search).get('dev') === 'true';
+let devShared = false;
 
 let data = null;
 let wordSet = new Set();
@@ -25,6 +46,8 @@ const els = {
   inputRow: $('#input-row'),
   slots: [],
   submit: $('#submit'),
+  footerVersion: $('#footer-version'),
+  devBadge: $('#dev-badge'),
   message: $('#message'),
   undo: $('#undo'),
   hint: $('#hint'),
@@ -224,16 +247,119 @@ function shareText() {
   return `« La pause (illimité) — ${n} coup${plur} (par ${par}) »`;
 }
 
-async function copyShare() {
-  const text = shareText();
-  try {
-    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
-      await navigator.share({ text });
-    } else {
-      await navigator.clipboard.writeText(text);
-      flashMessage('Partage copié !', 'ok');
+function generateShareImage(words) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  const cellW = 40;
+  const cellH = 46;
+  const gap = 6;
+  const padding = 24;
+  const stepsCount = words.length;
+  
+  const contentW = 5 * cellW + 4 * gap;
+  const contentH = stepsCount * cellH + (stepsCount - 1) * gap;
+  
+  canvas.width = contentW + 2 * padding;
+  canvas.height = contentH + 2 * padding;
+  
+  // Background
+  ctx.fillStyle = '#F7F1E4';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  for (let r = 0; r < stepsCount; r++) {
+    const word = words[r];
+    const y = padding + r * (cellH + gap);
+    
+    for (let c = 0; c < 5; c++) {
+      const x = padding + c * (cellW + gap);
+      const radius = 8;
+      
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, cellW, cellH, radius);
+      } else {
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + cellW, y, x + cellW, y + cellH, radius);
+        ctx.arcTo(x + cellW, y + cellH, x, y + cellH, radius);
+        ctx.arcTo(x, y + cellH, x, y, radius);
+        ctx.arcTo(x, y, x + cellW, y, radius);
+      }
+      ctx.closePath();
+      
+      const isCorrect = r > 0 && word[c] === data.target[c];
+      
+      if (isCorrect) {
+        ctx.fillStyle = isDev ? '#B3402A' : '#6F4E37';
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#FDFAF2';
+        ctx.fill();
+        ctx.strokeStyle = '#E7DCC8';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     }
-  } catch {}
+  }
+  
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
+
+function downloadImage(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function copyShare() {
+  if (isDev) {
+    devShared = true;
+    renderLadder();
+  }
+  const text = shareText();
+  const g = game();
+  const allWords = [g.start, ...g.moves];
+
+  try {
+    const blob = await generateShareImage(allWords);
+    const file = new File([blob], 'la-pause.png', { type: 'image/png' });
+
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
+      await navigator.share({
+        text,
+        files: [file]
+      });
+    } else if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        flashMessage('Image copiée dans le presse-papiers !', 'ok');
+      } catch (err) {
+        downloadImage(blob, 'la-pause.png');
+        flashMessage('Téléchargement de l\'image...', 'ok');
+      }
+    } else {
+      downloadImage(blob, 'la-pause.png');
+      flashMessage('Téléchargement de l\'image...', 'ok');
+    }
+  } catch (err) {
+    try {
+      if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+        await navigator.share({ text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        flashMessage('Partage copié !', 'ok');
+      }
+    } catch {}
+  }
 }
 
 function flashMessage(text, cls) {
@@ -258,13 +384,17 @@ function stepHTML(g, all, word, index) {
   let letters = '';
   for (let i = 0; i < word.length; i++) {
     const cls = ['letter'];
-    if (i === ci) cls.push('changed');
-    if (index > 0 && word[i] === data.target[i]) cls.push('correct');
+    if (isDev && devShared) {
+      cls.push('dev-red');
+    } else {
+      if (i === ci) cls.push('changed');
+      if (index > 0 && word[i] === data.target[i]) cls.push('correct');
+    }
     letters += `<span class="${cls.join(' ')}">${word[i]}</span>`;
   }
   const note = index === 0 ? 'départ' : '';
   const cur = index === steps(g);
-  return `<li class="step${cur ? ' current' : ''}"><span class="num">${index}</span><span class="word">${letters}</span><span class="note">${note}</span></li>`;
+  return `<li class="step${cur ? ' current' : ''}"><a href="https://www.larousse.fr/dictionnaires/francais/${word}" target="_blank" rel="noopener noreferrer" class="num" title="See word definition">${index}</a><span class="word">${letters}</span><span class="note">${note}</span></li>`;
 }
 
 function buildSlots() {
@@ -315,8 +445,9 @@ function renderControls() {
   els.submit.disabled = solved;
   els.input.disabled = solved;
   els.inputRow.hidden = solved;
-  els.hint.style.display = mode === 'free' ? '' : 'none';
-  els.hint.disabled = solved || game().hintUsed;
+  els.submit.hidden = solved;
+  els.hint.style.display = (mode === 'free' || isDev) ? '' : 'none';
+  els.hint.disabled = solved || (game().hintUsed && !isDev);
 }
 
 function renderSolved() {
@@ -372,6 +503,7 @@ function renderAll() {
 /* ---------------- actions ---------------- */
 
 function commitMove(word) {
+  devShared = false;
   const g = game();
   g.moves.push(word);
   if (mode === 'daily') recordPlay();
@@ -412,6 +544,7 @@ function submitGuess(ev) {
 }
 
 function undoMove() {
+  devShared = false;
   const g = game();
   if (g.moves.length === 0) return;
   if (g.solved && mode === 'daily') return;
@@ -424,6 +557,7 @@ function undoMove() {
 
 function switchMode(next) {
   if (next === mode) return;
+  devShared = false;
   mode = next;
   els.tabDaily.classList.toggle('is-active', mode === 'daily');
   els.tabFree.classList.toggle('is-active', mode === 'free');
@@ -435,6 +569,7 @@ function switchMode(next) {
 }
 
 function startFree() {
+  devShared = false;
   newFreeGame();
   saveState();
   els.message.textContent = '';
@@ -458,15 +593,17 @@ function hintPosition() {
 }
 
 function useHint() {
-  if (mode !== 'free' || isSolved() || game().hintUsed) return;
+  if ((mode !== 'free' && !isDev) || isSolved() || (game().hintUsed && !isDev)) return;
   const pos = hintPosition();
   if (pos == null) {
     flashMessage('Aucun conseil disponible ici.', 'error');
     return;
   }
-  game().hintUsed = true;
-  saveState();
-  renderControls();
+  if (!isDev) {
+    game().hintUsed = true;
+    saveState();
+    renderControls();
+  }
   flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
 }
 
@@ -479,6 +616,14 @@ async function init() {
   wordIndex = new Map(data.words.map((w, i) => [w, i]));
   dailyStart = data.words[data.daily[dailyIndex()]];
 
+  if (data.appVersion) {
+    els.footerVersion.textContent = `v${data.appVersion}`;
+  }
+
+  if (isDev) {
+    els.devBadge.hidden = false;
+  }
+
   stats = Object.assign(stats, loadJSON(STATS_KEY) || {});
   restore();
 
@@ -490,6 +635,10 @@ async function init() {
   els.shareSolved.addEventListener('click', copyShare);
   els.tabDaily.addEventListener('click', () => switchMode('daily'));
   els.tabFree.addEventListener('click', () => switchMode('free'));
+  $('#theme-toggle').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    setTheme(current === 'dark' ? 'light' : 'dark');
+  });
   els.input.addEventListener('input', () => {
     renderInput();
     els.message.textContent = '';

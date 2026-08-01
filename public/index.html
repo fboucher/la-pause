@@ -12,6 +12,22 @@
 <body>
   <div class="page">
     <header class="header">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Changer de thème">
+        <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
       <svg class="cup" viewBox="0 0 120 84" aria-hidden="true">
         <path class="steam s1" d="M42 24 q6 -12 0 -22"/>
         <path class="steam s2" d="M60 27 q6 -12 0 -22"/>
@@ -22,6 +38,7 @@
       </svg>
       <h1>La pause</h1>
       <p class="tagline">votre pause café</p>
+      <div id="dev-badge" class="dev-badge" hidden>DEV MODE</div>
     </header>
 
     <nav class="tabs" aria-label="Mode de jeu">
@@ -76,6 +93,11 @@
     <footer class="footer">
       <p>Lexique : liste de mots français ouverte (<a href="https://github.com/words/an-array-of-french-words" target="_blank" rel="noopener noreferrer">an-array-of-french-words</a>), normalisée sans accents.</p>
       <p>Chaque jour, un nouveau mot pour rejoindre <strong>PAUSE</strong>.</p>
+      <div class="footer-info">
+        <span class="footer-left"><a href="https://fboucheros.com" target="_blank" rel="noopener noreferrer">By Frank</a></span>
+        <span class="footer-center">c5m</span>
+        <span id="footer-version" class="footer-right">v1.0.0</span>
+      </div>
     </footer>
   </div>
 
