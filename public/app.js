@@ -22,6 +22,7 @@ const TZ = 'America/Toronto';
 const EPOCH_UTC = Date.UTC(2026, 0, 1);
 const STATE_KEY = 'lapause.v1';
 const STATS_KEY = 'lapause.stats.v1';
+const TOKENS_KEY = 'lapause.tokens.v1';
 
 const isDev = new URLSearchParams(window.location.search).get('dev') === '1';
 let devShared = false;
@@ -32,8 +33,9 @@ let wordIndex = new Map();
 let dailyStart = null;
 
 let mode = 'daily';
-let dailyGame = { start: '', moves: [], solved: false, hintsUsed: 0 };
-let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0 };
+let dailyGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+let tokens = 0;
 let stats = { wins: 0, streak: 0, best: 0, played: 0, playedDate: null, lastWin: null, dist: {} };
 
 const els = {
@@ -51,6 +53,7 @@ const els = {
   message: $('#message'),
   undo: $('#undo'),
   hint: $('#hint'),
+  tokenCount: $('#token-count'),
   newGame: $('#new-game'),
   share: $('#share'),
   solved: $('#solved'),
@@ -131,6 +134,10 @@ function saveStats() {
   try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch {}
 }
 
+function saveTokens() {
+  try { localStorage.setItem(TOKENS_KEY, tokens); } catch {}
+}
+
 function restore() {
   const saved = loadJSON(STATE_KEY);
   if (saved && saved.date === todayStr()) {
@@ -139,23 +146,25 @@ function restore() {
         start: saved.daily.start,
         moves: [...saved.daily.moves],
         solved: !!saved.daily.solved,
-        hintsUsed: saved.daily.hintsUsed !== undefined ? saved.daily.hintsUsed : (saved.daily.hintUsed ? 1 : 0)
+        hintsUsed: saved.daily.hintsUsed !== undefined ? saved.daily.hintsUsed : (saved.daily.hintUsed ? 1 : 0),
+        tokenAwarded: !!saved.daily.tokenAwarded
       };
     } else {
-      dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0 };
+      dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
     }
     if (saved.free && wordSet.has(saved.free.start)) {
       freeGame = {
         start: saved.free.start,
         moves: [...saved.free.moves],
         solved: !!saved.free.solved,
-        hintsUsed: saved.free.hintsUsed !== undefined ? saved.free.hintsUsed : (saved.free.hintUsed ? 1 : 0)
+        hintsUsed: saved.free.hintsUsed !== undefined ? saved.free.hintsUsed : (saved.free.hintUsed ? 1 : 0),
+        tokenAwarded: !!saved.free.tokenAwarded
       };
     } else {
       newFreeGame();
     }
   } else {
-    dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0 };
+    dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
     newFreeGame();
   }
 }
@@ -172,7 +181,7 @@ function randomStart() {
 }
 
 function newFreeGame() {
-  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0 };
+  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
 }
 
 function parOf(word) {
@@ -516,6 +525,12 @@ function renderDist() {
     .join('');
 }
 
+function renderTokens() {
+  if (els.tokenCount) {
+    els.tokenCount.textContent = tokens;
+  }
+}
+
 function renderAll() {
   renderMeta();
   renderLadder();
@@ -523,6 +538,7 @@ function renderAll() {
   renderSolved();
   renderControls();
   renderStats();
+  renderTokens();
 }
 
 /* ---------------- actions ---------------- */
@@ -542,7 +558,13 @@ function commitMove(word) {
 }
 
 function handleWin() {
-  game().solved = true;
+  const g = game();
+  g.solved = true;
+  if (g.hintsUsed === 0 && !g.tokenAwarded) {
+    tokens += 1;
+    g.tokenAwarded = true;
+    saveTokens();
+  }
   if (mode === 'daily') recordWin();
   saveState();
   saveStats();
@@ -667,6 +689,7 @@ async function init() {
   }
 
   stats = Object.assign(stats, loadJSON(STATS_KEY) || {});
+  tokens = parseInt(localStorage.getItem(TOKENS_KEY)) || 0;
   restore();
 
   els.form.addEventListener('submit', submitGuess);
