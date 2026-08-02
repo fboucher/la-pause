@@ -427,12 +427,12 @@ function renderLadder() {
 function renderMeta() {
   const g = game();
   const label = mode === 'daily' ? `Puzzle n°${puzzleNumber()}` : 'Mode illimité';
+  const par = parOf(g.start);
   if (!g.solved) {
-    els.meta.innerHTML = `<span>${label}</span>`;
+    els.meta.innerHTML = `<span>${label}</span><span class="par">par ${par}</span>`;
     return;
   }
   const n = steps(g);
-  const par = parOf(g.start);
   els.meta.innerHTML = `<span>${label}</span><span class="par">${n} coup${n > 1 ? 's' : ''} · par ${par}</span>`;
 }
 
