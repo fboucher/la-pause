@@ -578,7 +578,7 @@ function startFree() {
   els.input.focus();
 }
 
-function hintPosition() {
+function hintWord() {
   const w = lastWord();
   const d = parOf(w);
   for (let i = 0; i < w.length; i++) {
@@ -586,24 +586,41 @@ function hintPosition() {
       const ch = String.fromCharCode(c);
       if (ch === w[i]) continue;
       const cand = w.slice(0, i) + ch + w.slice(i + 1);
-      if (wordSet.has(cand) && parOf(cand) === d - 1) return i + 1;
+      if (wordSet.has(cand) && parOf(cand) === d - 1) return cand;
     }
+  }
+  return null;
+}
+
+function hintPosition() {
+  const w = lastWord();
+  const word = hintWord();
+  if (!word) return null;
+  for (let i = 0; i < w.length; i++) {
+    if (w[i] !== word[i]) return i + 1;
   }
   return null;
 }
 
 function useHint() {
   if ((mode !== 'free' && !isDev) || isSolved() || (game().hintUsed && !isDev)) return;
+  if (isDev) {
+    const word = hintWord();
+    if (word == null) {
+      flashMessage('Aucun conseil disponible ici.', 'error');
+      return;
+    }
+    flashMessage(`Conseil : ${word.toUpperCase()}`, 'ok');
+    return;
+  }
   const pos = hintPosition();
   if (pos == null) {
     flashMessage('Aucun conseil disponible ici.', 'error');
     return;
   }
-  if (!isDev) {
-    game().hintUsed = true;
-    saveState();
-    renderControls();
-  }
+  game().hintUsed = true;
+  saveState();
+  renderControls();
   flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
 }
 
