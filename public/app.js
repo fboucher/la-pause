@@ -52,7 +52,8 @@ const els = {
   devBadge: $('#dev-badge'),
   message: $('#message'),
   undo: $('#undo'),
-  hint: $('#hint'),
+  hintPosition: $('#hint-position'),
+  hintWord: $('#hint-word'),
   tokenCount: $('#token-count'),
   newGame: $('#new-game'),
   share: $('#share'),
@@ -468,8 +469,24 @@ function renderControls() {
   els.input.disabled = solved;
   els.inputRow.hidden = solved;
   els.submit.hidden = solved;
-  els.hint.style.display = (mode === 'free' || isDev) ? '' : 'none';
-  els.hint.disabled = solved;
+
+  if (isDev) {
+    els.hintPosition.style.display = '';
+    els.hintPosition.disabled = solved;
+    els.hintPosition.title = solved ? "Partie terminée !" : "Révèle quelle lettre changer (Gratuit en dev)";
+
+    els.hintWord.style.display = '';
+    els.hintWord.disabled = solved;
+    els.hintWord.title = solved ? "Partie terminée !" : "Joue automatiquement le mot suivant (Gratuit en dev)";
+  } else {
+    els.hintPosition.style.display = '';
+    els.hintPosition.disabled = solved || tokens < 1;
+    els.hintPosition.title = solved ? "Partie terminée !" : (tokens < 1 ? "Coûte 1 🪙 (Solde insuffisant)" : "Révèle quelle lettre changer (coûte 1 🪙)");
+
+    els.hintWord.style.display = '';
+    els.hintWord.disabled = solved || tokens < 2;
+    els.hintWord.title = solved ? "Partie terminée !" : (tokens < 2 ? "Coûte 2 🪙 (Solde insuffisant)" : "Joue automatiquement le mot suivant (coûte 2 🪙)");
+  }
 }
 
 function renderSolved() {
@@ -649,26 +666,68 @@ function hintPosition() {
   return null;
 }
 
-function useHint() {
-  if ((mode !== 'free' && !isDev) || isSolved()) return;
-  if (isDev) {
-    const word = hintWord();
-    if (word == null) {
-      flashMessage('Aucun conseil disponible ici.', 'error');
+function usePositionHint() {
+  if (isSolved()) return;
+  if (!isDev) {
+    if (tokens < 1) {
+      flashMessage('Jetons insuffisants.', 'error');
       return;
     }
-    flashMessage(`Conseil : ${word.toUpperCase()}`, 'ok');
-    return;
+    tokens -= 1;
+    saveTokens();
   }
   const pos = hintPosition();
   if (pos == null) {
     flashMessage('Aucun conseil disponible ici.', 'error');
+    if (!isDev) {
+      tokens += 1;
+      saveTokens();
+    }
     return;
   }
-  game().hintsUsed = (game().hintsUsed || 0) + 1;
+  if (!isDev) {
+    game().hintsUsed = (game().hintsUsed || 0) + 1;
+  }
   saveState();
-  renderControls();
-  flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
+  renderAll();
+  if (isDev) {
+    const word = hintWord();
+    flashMessage(`Conseil dev : changez la lettre n°${pos} pour ${word.toUpperCase()}.`, 'ok');
+  } else {
+    flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
+  }
+}
+
+function useNextWordHint() {
+  if (isSolved()) return;
+  if (!isDev) {
+    if (tokens < 2) {
+      flashMessage('Jetons insuffisants.', 'error');
+      return;
+    }
+    tokens -= 2;
+    saveTokens();
+  }
+  const word = hintWord();
+  if (word == null) {
+    flashMessage('Aucun conseil disponible ici.', 'error');
+    if (!isDev) {
+      tokens += 2;
+      saveTokens();
+    }
+    return;
+  }
+  if (!isDev) {
+    game().hintsUsed = (game().hintsUsed || 0) + 1;
+  }
+  saveState();
+  commitMove(word);
+  if (word === data.target) {
+    handleWin();
+  } else {
+    renderAll();
+  }
+  flashMessage(`Mot ${word.toUpperCase()} joué automatiquement.`, 'ok');
 }
 
 /* ---------------- init ---------------- */
@@ -694,7 +753,8 @@ async function init() {
 
   els.form.addEventListener('submit', submitGuess);
   els.undo.addEventListener('click', undoMove);
-  els.hint.addEventListener('click', useHint);
+  els.hintPosition.addEventListener('click', usePositionHint);
+  els.hintWord.addEventListener('click', useNextWordHint);
   els.newGame.addEventListener('click', startFree);
   els.share.addEventListener('click', copyShare);
   els.shareSolved.addEventListener('click', copyShare);
