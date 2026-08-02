@@ -23,7 +23,7 @@ const EPOCH_UTC = Date.UTC(2026, 0, 1);
 const STATE_KEY = 'lapause.v1';
 const STATS_KEY = 'lapause.stats.v1';
 
-const isDev = new URLSearchParams(window.location.search).get('dev') === 'true';
+const isDev = new URLSearchParams(window.location.search).get('dev') === '1';
 let devShared = false;
 
 let data = null;
