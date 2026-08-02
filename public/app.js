@@ -32,8 +32,8 @@ let wordIndex = new Map();
 let dailyStart = null;
 
 let mode = 'daily';
-let dailyGame = { start: '', moves: [], solved: false };
-let freeGame = { start: '', moves: [], solved: false, hintUsed: false };
+let dailyGame = { start: '', moves: [], solved: false, hintsUsed: 0 };
+let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0 };
 let stats = { wins: 0, streak: 0, best: 0, played: 0, playedDate: null, lastWin: null, dist: {} };
 
 const els = {
@@ -55,6 +55,7 @@ const els = {
   share: $('#share'),
   solved: $('#solved'),
   solvedTitle: $('#solved-title'),
+  solvedStars: $('#solved-stars'),
   solvedText: $('#solved-text'),
   shareSolved: $('#share-solved'),
   countdown: $('#countdown'),
@@ -134,22 +135,27 @@ function restore() {
   const saved = loadJSON(STATE_KEY);
   if (saved && saved.date === todayStr()) {
     if (saved.daily && wordSet.has(saved.daily.start)) {
-      dailyGame = { start: saved.daily.start, moves: [...saved.daily.moves], solved: !!saved.daily.solved };
+      dailyGame = {
+        start: saved.daily.start,
+        moves: [...saved.daily.moves],
+        solved: !!saved.daily.solved,
+        hintsUsed: saved.daily.hintsUsed !== undefined ? saved.daily.hintsUsed : (saved.daily.hintUsed ? 1 : 0)
+      };
     } else {
-      dailyGame = { start: dailyStart, moves: [], solved: false };
+      dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0 };
     }
     if (saved.free && wordSet.has(saved.free.start)) {
       freeGame = {
         start: saved.free.start,
         moves: [...saved.free.moves],
         solved: !!saved.free.solved,
-        hintUsed: !!saved.free.hintUsed,
+        hintsUsed: saved.free.hintsUsed !== undefined ? saved.free.hintsUsed : (saved.free.hintUsed ? 1 : 0)
       };
     } else {
       newFreeGame();
     }
   } else {
-    dailyGame = { start: dailyStart, moves: [], solved: false };
+    dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0 };
     newFreeGame();
   }
 }
@@ -166,7 +172,7 @@ function randomStart() {
 }
 
 function newFreeGame() {
-  freeGame = { start: randomStart(), moves: [], solved: false, hintUsed: false };
+  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0 };
 }
 
 function parOf(word) {
@@ -236,15 +242,22 @@ function recordWin() {
 
 /* ---------------- share ---------------- */
 
+function starRating(hintsUsed) {
+  if (hintsUsed === 0) return '★★★';
+  if (hintsUsed === 1) return '★★';
+  return '★';
+}
+
 function shareText() {
   const g = game();
   const n = steps(g);
   const par = parOf(g.start);
   const plur = n > 1 ? 's' : '';
+  const stars = starRating(g.hintsUsed || 0);
   if (mode === 'daily') {
-    return `« La pause n°${puzzleNumber()} — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
+    return `${stars} « La pause n°${puzzleNumber()} — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
   }
-  return `« La pause (illimité) — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
+  return `${stars} « La pause (illimité) — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
 }
 
 function generateShareImage(words) {
@@ -447,7 +460,7 @@ function renderControls() {
   els.inputRow.hidden = solved;
   els.submit.hidden = solved;
   els.hint.style.display = (mode === 'free' || isDev) ? '' : 'none';
-  els.hint.disabled = solved || (game().hintUsed && !isDev);
+  els.hint.disabled = solved;
 }
 
 function renderSolved() {
@@ -456,6 +469,18 @@ function renderSolved() {
   els.solved.hidden = !solved;
   if (!solved) return;
   els.solvedTitle.textContent = 'Pause atteinte !';
+
+  const starsCount = g.hintsUsed === 0 ? 3 : (g.hintsUsed === 1 ? 2 : 1);
+  let starsHTML = '';
+  for (let i = 1; i <= 3; i++) {
+    if (i <= starsCount) {
+      starsHTML += '<span class="star">★</span>';
+    } else {
+      starsHTML += '<span class="star empty">★</span>';
+    }
+  }
+  els.solvedStars.innerHTML = starsHTML;
+
   const n = steps(g);
   const par = parOf(g.start);
   els.solvedText.textContent = `Vous avez rejoint PAUSE en ${n} coup${n > 1 ? 's' : ''} (par ${par}).`;
@@ -603,7 +628,7 @@ function hintPosition() {
 }
 
 function useHint() {
-  if ((mode !== 'free' && !isDev) || isSolved() || (game().hintUsed && !isDev)) return;
+  if ((mode !== 'free' && !isDev) || isSolved()) return;
   if (isDev) {
     const word = hintWord();
     if (word == null) {
@@ -618,7 +643,7 @@ function useHint() {
     flashMessage('Aucun conseil disponible ici.', 'error');
     return;
   }
-  game().hintUsed = true;
+  game().hintsUsed = (game().hintsUsed || 0) + 1;
   saveState();
   renderControls();
   flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');

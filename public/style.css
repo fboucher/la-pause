@@ -485,6 +485,23 @@ h1 {
   color: var(--ok);
 }
 
+.solved-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  font-size: 2.2rem;
+  margin: 4px 0 14px;
+}
+
+.solved-stars .star {
+  color: #FFC107;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.solved-stars .star.empty {
+  color: var(--line);
+}
+
 .solved-text { margin: 0 0 14px; }
 
 .countdown {
