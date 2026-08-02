@@ -242,9 +242,9 @@ function shareText() {
   const par = parOf(g.start);
   const plur = n > 1 ? 's' : '';
   if (mode === 'daily') {
-    return `« La pause n°${puzzleNumber()} — ${n} coup${plur} (par ${par}) »`;
+    return `« La pause n°${puzzleNumber()} — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
   }
-  return `« La pause (illimité) — ${n} coup${plur} (par ${par}) »`;
+  return `« La pause (illimité) — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
 }
 
 function generateShareImage(words) {
