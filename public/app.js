@@ -265,9 +265,9 @@ function shareText() {
   const plur = n > 1 ? 's' : '';
   const stars = starRating(g.hintsUsed || 0);
   if (mode === 'daily') {
-    return `${stars} « La pause n°${puzzleNumber()} — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
+    return `${stars} La pause n°${puzzleNumber()} — rejoint PAUSE en ${n} coup${plur} (par ${par})\nc5m.ca/pause`;
   }
-  return `${stars} « La pause (illimité) — ${n} coup${plur} (par ${par}) »\nc5m.ca/pause`;
+  return `${stars} La pause (illimité) — rejoint PAUSE en ${n} coup${plur} (par ${par})\nc5m.ca/pause`;
 }
 
 function generateShareImage(words) {
@@ -278,21 +278,53 @@ function generateShareImage(words) {
   const cellH = 46;
   const gap = 6;
   const padding = 24;
+  const headerH = 95;
   const stepsCount = words.length;
   
   const contentW = 5 * cellW + 4 * gap;
   const contentH = stepsCount * cellH + (stepsCount - 1) * gap;
   
   canvas.width = contentW + 2 * padding;
-  canvas.height = contentH + 2 * padding;
+  canvas.height = contentH + 2 * padding + headerH;
   
   // Background
   ctx.fillStyle = '#F7F1E4';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
+  // Draw Header
+  const g = game();
+  const n = steps(g);
+  const par = parOf(g.start);
+  const plur = n > 1 ? 's' : '';
+  const label = mode === 'daily' ? `La pause n°${puzzleNumber()}` : 'La pause (illimité)';
+  const scoreText = `rejoint PAUSE en ${n} coup${plur} (par ${par})`;
+
+  ctx.textAlign = 'center';
+
+  // 1. Draw Title
+  ctx.fillStyle = '#33241B';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText(label, canvas.width / 2, padding + 18);
+
+  // 2. Draw Stars
+  const starsCount = g.hintsUsed === 0 ? 3 : (g.hintsUsed === 1 ? 2 : 1);
+  let starsStr = '';
+  for (let i = 1; i <= 3; i++) {
+    starsStr += i <= starsCount ? '★' : '☆';
+  }
+  ctx.fillStyle = '#FFC107';
+  ctx.font = '22px sans-serif';
+  ctx.fillText(starsStr, canvas.width / 2, padding + 48);
+
+  // 3. Draw Subtitle / Score
+  ctx.fillStyle = '#9B8A78';
+  ctx.font = '500 12px sans-serif';
+  ctx.fillText(scoreText, canvas.width / 2, padding + 70);
+  
+  // Draw Grid
   for (let r = 0; r < stepsCount; r++) {
     const word = words[r];
-    const y = padding + r * (cellH + gap);
+    const y = padding + headerH + r * (cellH + gap);
     
     for (let c = 0; c < 5; c++) {
       const x = padding + c * (cellW + gap);
