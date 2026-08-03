@@ -1,5 +1,6 @@
 FROM node:20-alpine AS build
 WORKDIR /app
+COPY package.json ./
 COPY tools/ ./tools/
 COPY public/ ./public/
 RUN node tools/build.js
