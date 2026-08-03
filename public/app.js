@@ -733,7 +733,7 @@ function useNextWordHint() {
 /* ---------------- init ---------------- */
 
 async function init() {
-  const res = await fetch('data.json');
+  const res = await fetch(`data.json?v=${Date.now()}`);
   data = await res.json();
   wordSet = new Set(data.words);
   wordIndex = new Map(data.words.map((w, i) => [w, i]));
