@@ -279,13 +279,14 @@ function generateShareImage(words) {
   const gap = 6;
   const padding = 24;
   const headerH = 95;
+  const footerH = 34;
   const stepsCount = words.length;
   
   const contentW = 5 * cellW + 4 * gap;
   const contentH = stepsCount * cellH + (stepsCount - 1) * gap;
   
   canvas.width = contentW + 2 * padding;
-  canvas.height = contentH + 2 * padding + headerH;
+  canvas.height = contentH + 2 * padding + headerH + footerH;
   
   // Background
   ctx.fillStyle = '#F7F1E4';
@@ -356,6 +357,12 @@ function generateShareImage(words) {
       }
     }
   }
+
+  // Draw Footer Short URL
+  const footerY = padding + headerH + contentH + 22;
+  ctx.fillStyle = '#9B8A78';
+  ctx.font = '600 13px sans-serif';
+  ctx.fillText('c5m.ca/pause', canvas.width / 2, footerY);
   
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
