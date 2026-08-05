@@ -232,6 +232,13 @@ function validate(raw) {
 
 /* ---------------- stats ---------------- */
 
+function checkStreakStaleness() {
+  if (stats.lastWin && stats.lastWin !== todayStr() && stats.lastWin !== yesterdayStr()) {
+    stats.streak = 0;
+    saveStats();
+  }
+}
+
 function recordPlay() {
   if (stats.playedDate !== todayStr()) {
     stats.played += 1;
@@ -240,6 +247,7 @@ function recordPlay() {
 }
 
 function recordWin() {
+  if (mode !== 'daily') return;
   if (stats.lastWin === todayStr()) return;
   const g = game();
   const n = steps(g);
@@ -248,6 +256,7 @@ function recordWin() {
   stats.streak = stats.lastWin === yesterdayStr() ? stats.streak + 1 : 1;
   stats.best = Math.max(stats.best, stats.streak);
   stats.lastWin = todayStr();
+  saveStats();
 }
 
 /* ---------------- share ---------------- */
@@ -548,19 +557,22 @@ function renderSolved() {
 
   const n = steps(g);
   const par = parOf(g.start);
-  els.solvedText.textContent = `Vous avez rejoint PAUSE en ${n} coup${n > 1 ? 's' : ''} (par ${par}).`;
   if (mode === 'daily') {
+    const streakSuffix = stats.streak > 0 ? ` 🔥 Série : ${stats.streak} jour${stats.streak > 1 ? 's' : ''}.` : '';
+    els.solvedText.textContent = `Vous avez rejoint PAUSE en ${n} coup${n > 1 ? 's' : ''} (par ${par}).${streakSuffix}`;
     const left = nextMidnight() - Date.now();
     const h = Math.floor(left / 3600000);
     const m = Math.floor((left % 3600000) / 60000);
     els.countdown.textContent = `Prochaine pause dans ${h} h ${m} min.`;
     els.countdown.hidden = false;
   } else {
+    els.solvedText.textContent = `Vous avez rejoint PAUSE en ${n} coup${n > 1 ? 's' : ''} (par ${par}).`;
     els.countdown.hidden = true;
   }
 }
 
 function renderStats() {
+  checkStreakStaleness();
   els.statWins.textContent = stats.wins;
   els.statStreak.textContent = stats.streak;
   els.statBest.textContent = stats.best;
@@ -787,6 +799,7 @@ async function init() {
   }
 
   stats = Object.assign(stats, loadJSON(STATS_KEY) || {});
+  checkStreakStaleness();
   tokens = parseInt(localStorage.getItem(TOKENS_KEY)) || 0;
   restore();
 
