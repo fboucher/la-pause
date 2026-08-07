@@ -34,7 +34,7 @@ let dailyStart = null;
 
 let mode = 'daily';
 let dailyGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
-let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false };
 let tokens = 0;
 let stats = { wins: 0, streak: 0, best: 0, played: 0, playedDate: null, lastWin: null, dist: {} };
 
@@ -159,7 +159,8 @@ function restore() {
         moves: [...saved.free.moves],
         solved: !!saved.free.solved,
         hintsUsed: saved.free.hintsUsed !== undefined ? saved.free.hintsUsed : (saved.free.hintUsed ? 1 : 0),
-        tokenAwarded: !!saved.free.tokenAwarded
+        tokenAwarded: !!saved.free.tokenAwarded,
+        freeHintUsed: !!saved.free.freeHintUsed
       };
     } else {
       newFreeGame();
@@ -182,7 +183,7 @@ function randomStart() {
 }
 
 function newFreeGame() {
-  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false };
 }
 
 function parOf(word) {
@@ -527,9 +528,14 @@ function renderControls() {
     els.hintWord.disabled = solved;
     els.hintWord.title = solved ? "Partie terminée !" : "Joue automatiquement le mot suivant (Gratuit en dev)";
   } else {
+    const hasFreeHint = mode === 'free' && !freeGame.freeHintUsed;
     els.hintPosition.style.display = '';
-    els.hintPosition.disabled = solved || tokens < 1;
-    els.hintPosition.title = solved ? "Partie terminée !" : (tokens < 1 ? "Coûte 1 🪙 (Solde insuffisant)" : "Révèle quelle lettre changer (coûte 1 🪙)");
+    els.hintPosition.disabled = solved || (tokens < 1 && !hasFreeHint);
+    els.hintPosition.title = solved
+      ? "Partie terminée !"
+      : (hasFreeHint ? "1 conseil gratuit ! Révèle quelle lettre changer" : (tokens < 1 ? "Coûte 1 🪙 (Solde insuffisant)" : "Révèle quelle lettre changer (coûte 1 🪙)"));
+    const positionPrice = $('#hint-position-price');
+    if (positionPrice) positionPrice.textContent = hasFreeHint ? '(1 gratuit 🎁)' : '(1 🪙)';
 
     els.hintWord.style.display = '';
     els.hintWord.disabled = solved || tokens < 2;
@@ -719,18 +725,22 @@ function hintPosition() {
 
 function usePositionHint() {
   if (isSolved()) return;
+  let usingFreeHint = false;
   if (!isDev) {
-    if (tokens < 1) {
+    if (mode === 'free' && !freeGame.freeHintUsed) {
+      usingFreeHint = true;
+    } else if (tokens < 1) {
       flashMessage('Jetons insuffisants.', 'error');
       return;
+    } else {
+      tokens -= 1;
+      saveTokens();
     }
-    tokens -= 1;
-    saveTokens();
   }
   const pos = hintPosition();
   if (pos == null) {
     flashMessage('Aucun conseil disponible ici.', 'error');
-    if (!isDev) {
+    if (!isDev && !usingFreeHint) {
       tokens += 1;
       saveTokens();
     }
@@ -738,12 +748,17 @@ function usePositionHint() {
   }
   if (!isDev) {
     game().hintsUsed = (game().hintsUsed || 0) + 1;
+    if (usingFreeHint) {
+      game().freeHintUsed = true;
+    }
   }
   saveState();
   renderAll();
   if (isDev) {
     const word = hintWord();
     flashMessage(`Conseil dev : changez la lettre n°${pos} pour ${word.toUpperCase()}.`, 'ok');
+  } else if (usingFreeHint) {
+    flashMessage(`Conseil gratuit : changez la lettre n°${pos}.`, 'ok');
   } else {
     flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
   }
