@@ -23,6 +23,7 @@ const EPOCH_UTC = Date.UTC(2026, 0, 1);
 const STATE_KEY = 'lapause.v1';
 const STATS_KEY = 'lapause.stats.v1';
 const TOKENS_KEY = 'lapause.tokens.v1';
+const GUEST_KEY = 'lapause.guest.v1';
 
 const isDev = new URLSearchParams(window.location.search).get('dev') === '1';
 let devShared = false;
@@ -137,6 +138,25 @@ function saveStats() {
 
 function saveTokens() {
   try { localStorage.setItem(TOKENS_KEY, tokens); } catch {}
+}
+
+function guestId() {
+  let id = localStorage.getItem(GUEST_KEY);
+  if (!id) {
+    id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `g-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    try { localStorage.setItem(GUEST_KEY, id); } catch {}
+  }
+  return id;
+}
+
+function heartbeat() {
+  fetch('/api/analytics/heartbeat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guestId: guestId() }),
+  }).catch(() => {});
 }
 
 function restore() {
@@ -802,6 +822,7 @@ async function init() {
   checkStreakStaleness();
   tokens = parseInt(localStorage.getItem(TOKENS_KEY)) || 0;
   restore();
+  heartbeat();
 
   els.form.addEventListener('submit', submitGuess);
   els.undo.addEventListener('click', undoMove);
