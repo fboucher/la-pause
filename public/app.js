@@ -727,13 +727,11 @@ function usePositionHint() {
   if (isSolved()) return;
   let usingFreeHint = false;
   if (!isDev) {
-    if (tokens < 1) {
-      if (mode === 'free' && !freeGame.freeHintUsed) {
-        usingFreeHint = true;
-      } else {
-        flashMessage('Jetons insuffisants.', 'error');
-        return;
-      }
+    if (mode === 'free' && !freeGame.freeHintUsed) {
+      usingFreeHint = true;
+    } else if (tokens < 1) {
+      flashMessage('Jetons insuffisants.', 'error');
+      return;
     } else {
       tokens -= 1;
       saveTokens();
