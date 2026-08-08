@@ -529,16 +529,34 @@ function renderLadder() {
   els.ladder.innerHTML = all.map((w, i) => stepHTML(g, all, w, i)).join('');
 }
 
+function getDifficultyLabel(par) {
+  if (par == null) return '';
+  if (par <= 3) return 'Facile';
+  if (par <= 6) return 'Moyen';
+  return 'Difficile';
+}
+
+function getDifficultyClass(par) {
+  if (par == null) return '';
+  if (par <= 3) return 'diff-easy';
+  if (par <= 6) return 'diff-medium';
+  return 'diff-hard';
+}
+
 function renderMeta() {
   const g = game();
   const label = mode === 'daily' ? `Puzzle n°${puzzleNumber()}` : 'Mode illimité';
   const par = parOf(g.start);
+  const diffLabel = getDifficultyLabel(par);
+  const diffClass = getDifficultyClass(par);
+  const diffBadge = diffLabel ? `<span class="diff-badge ${diffClass}">${diffLabel}</span>` : '';
+
   if (!g.solved) {
-    els.meta.innerHTML = `<span>${label}</span><span class="par">par ${par}</span>`;
+    els.meta.innerHTML = `<span>${label}${diffBadge}</span><span class="par">par ${par}</span>`;
     return;
   }
   const n = steps(g);
-  els.meta.innerHTML = `<span>${label}</span><span class="par">${n} coup${n > 1 ? 's' : ''} · par ${par}</span>`;
+  els.meta.innerHTML = `<span>${label}${diffBadge}</span><span class="par">${n} coup${n > 1 ? 's' : ''} · par ${par}</span>`;
 }
 
 function renderControls() {

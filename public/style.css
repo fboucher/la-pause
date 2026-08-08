@@ -233,6 +233,36 @@ h1 {
   font-weight: 700;
 }
 
+.diff-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+
+.diff-badge.diff-easy {
+  background-color: rgba(76, 122, 80, 0.12);
+  color: var(--ok);
+  border: 1px solid rgba(76, 122, 80, 0.2);
+}
+
+.diff-badge.diff-medium {
+  background-color: rgba(180, 96, 58, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(180, 96, 58, 0.2);
+}
+
+.diff-badge.diff-hard {
+  background-color: rgba(179, 64, 42, 0.12);
+  color: var(--danger);
+  border: 1px solid rgba(179, 64, 42, 0.2);
+}
+
 /* ---------- ladder ---------- */
 
 .ladder {
