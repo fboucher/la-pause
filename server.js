@@ -61,7 +61,7 @@ function createApp(db, options = {}) {
         cookie: {
           httpOnly: true,
           sameSite: 'lax',
-          secure: process.env.NODE_ENV === 'production',
+          secure: process.env.NODE_ENV === 'production' ? 'auto' : false,
         },
       })
     );
