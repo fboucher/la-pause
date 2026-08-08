@@ -69,6 +69,18 @@ const els = {
   statBest: $('#stat-best'),
   statRate: $('#stat-rate'),
   distBars: $('#dist-bars'),
+  signinBtn: $('#signin-btn'),
+  userBadge: $('#user-badge'),
+  userAvatar: $('#user-avatar'),
+  userStatus: $('#user-status'),
+  userDropdown: $('#user-dropdown'),
+  userName: $('#user-name'),
+  logoutBtn: $('#logout-btn'),
+  authModal: $('#auth-modal'),
+  googleBtn: $('#google-btn'),
+  githubBtn: $('#github-btn'),
+  modalClose: $('#modal-close'),
+  modalBackdrop: $('.modal-backdrop'),
 };
 
 function game() {
@@ -816,6 +828,63 @@ function useNextWordHint() {
   flashMessage(`Mot ${word.toUpperCase()} joué automatiquement.`, 'ok');
 }
 
+/* ---------------- auth ---------------- */
+
+let currentUser = null;
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json.authenticated && json.user) {
+      currentUser = json.user;
+    } else {
+      currentUser = null;
+    }
+  } catch (e) {
+    currentUser = null;
+  }
+  renderUserAuth();
+}
+
+function renderUserAuth() {
+  if (currentUser) {
+    if (els.signinBtn) els.signinBtn.hidden = true;
+    if (els.userBadge) {
+      els.userBadge.hidden = false;
+      if (currentUser.avatar) {
+        els.userAvatar.src = currentUser.avatar;
+        els.userAvatar.hidden = false;
+      } else {
+        els.userAvatar.hidden = true;
+      }
+    }
+    if (els.userName) {
+      els.userName.textContent = currentUser.name || currentUser.email || 'Joueur';
+    }
+  } else {
+    if (els.signinBtn) els.signinBtn.hidden = false;
+    if (els.userBadge) els.userBadge.hidden = true;
+    if (els.userDropdown) els.userDropdown.hidden = true;
+  }
+}
+
+function openAuthModal() {
+  if (els.authModal) els.authModal.hidden = false;
+}
+
+function closeAuthModal() {
+  if (els.authModal) els.authModal.hidden = true;
+}
+
+async function handleLogout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {}
+  window.location.reload();
+}
+
 /* ---------------- init ---------------- */
 
 async function init() {
@@ -838,6 +907,7 @@ async function init() {
   tokens = parseInt(localStorage.getItem(TOKENS_KEY)) || 0;
   restore();
   heartbeat();
+  checkAuth();
 
   els.form.addEventListener('submit', submitGuess);
   els.undo.addEventListener('click', undoMove);
@@ -858,8 +928,40 @@ async function init() {
     els.message.className = 'message';
   });
 
+  if (els.signinBtn) els.signinBtn.addEventListener('click', openAuthModal);
+  if (els.modalClose) els.modalClose.addEventListener('click', closeAuthModal);
+  if (els.modalBackdrop) els.modalBackdrop.addEventListener('click', closeAuthModal);
+  if (els.googleBtn) {
+    els.googleBtn.addEventListener('click', () => { window.location.href = '/auth/google'; });
+  }
+  if (els.githubBtn) {
+    els.githubBtn.addEventListener('click', () => { window.location.href = '/auth/github'; });
+  }
+  if (els.userBadge) {
+    els.userBadge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (els.userDropdown) {
+        els.userDropdown.hidden = !els.userDropdown.hidden;
+      }
+    });
+  }
+  if (els.logoutBtn) {
+    els.logoutBtn.addEventListener('click', handleLogout);
+  }
+  document.addEventListener('click', (e) => {
+    if (els.userDropdown && !els.userDropdown.hidden && !els.userBadge.contains(e.target) && !els.userDropdown.contains(e.target)) {
+      els.userDropdown.hidden = true;
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && els.authModal && !els.authModal.hidden) {
+      closeAuthModal();
+    }
+  });
+
   buildSlots();
   renderAll();
 }
 
 init();
+

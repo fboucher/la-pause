@@ -1,6 +1,8 @@
 node_modules/
 .DS_Store
 *.log
+.env
 .dev/.env
 .dev/docker-compose.yml
 data/
+

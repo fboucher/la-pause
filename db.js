@@ -74,4 +74,36 @@ function recordGuestVisit(db, date, guestId) {
   return true;
 }
 
-module.exports = { openDatabase, todayInToronto, recordGuestVisit };
+function findUser(db, provider, providerId) {
+  return db
+    .prepare('SELECT id, provider, provider_id, name, email, avatar, created_at FROM users WHERE provider = ? AND provider_id = ?')
+    .get(provider, providerId);
+}
+
+function findUserById(db, id) {
+  return db
+    .prepare('SELECT id, provider, provider_id, name, email, avatar, created_at FROM users WHERE id = ?')
+    .get(id);
+}
+
+function upsertUser(db, { provider, providerId, name = null, email = null, avatar = null }) {
+  db.prepare(
+    `INSERT INTO users (provider, provider_id, name, email, avatar)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(provider, provider_id) DO UPDATE SET
+       name = excluded.name,
+       email = excluded.email,
+       avatar = excluded.avatar`
+  ).run(provider, providerId, name, email, avatar);
+  return findUser(db, provider, providerId);
+}
+
+module.exports = {
+  openDatabase,
+  todayInToronto,
+  recordGuestVisit,
+  findUser,
+  findUserById,
+  upsertUser,
+};
+
