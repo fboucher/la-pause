@@ -7,7 +7,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GitHubStrategy = require('passport-github2').Strategy;
-const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser } = require('./db');
+const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin } = require('./db');
 
 function loadEnv() {
   const envPath = path.join(__dirname, '.env');
@@ -43,6 +43,14 @@ function createApp(db, options = {}) {
   app.set('trust proxy', 1);
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+
+  if (options.mockUser) {
+    app.use((req, res, next) => {
+      req.isAuthenticated = () => true;
+      req.user = options.mockUser;
+      next();
+    });
+  }
 
   if (sessionSecret) {
     app.use(
@@ -161,9 +169,53 @@ function createApp(db, options = {}) {
 
   app.get('/api/auth/me', (req, res) => {
     if (req.isAuthenticated && req.isAuthenticated()) {
+      const date = todayInToronto(now());
+      recordRegisteredVisit(db, date, req.user.id);
       return res.json({ authenticated: true, user: req.user });
     }
     res.json({ authenticated: false });
+  });
+
+  app.get('/api/user/profile', (req, res) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const date = todayInToronto(now());
+    recordRegisteredVisit(db, date, req.user.id);
+    const stats = getPlayerStats(db, req.user.id);
+    res.json({
+      id: req.user.id,
+      provider: req.user.provider,
+      provider_id: req.user.provider_id,
+      name: req.user.name,
+      email: req.user.email,
+      avatar: req.user.avatar,
+      created_at: req.user.created_at,
+      stats,
+    });
+  });
+
+  app.post('/api/user/sync', (req, res) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const { tokens, wins, streak, best_streak } = req.body || {};
+    const clientTokens = parseInt(tokens, 10) || 0;
+    const clientWins = parseInt(wins, 10) || 0;
+    const clientStreak = parseInt(streak, 10) || 0;
+    const clientBestStreak = parseInt(best_streak, 10) || 0;
+
+    const merged = syncPlayerStats(db, req.user.id, {
+      tokens: clientTokens,
+      wins: clientWins,
+      streak: clientStreak,
+      best_streak: clientBestStreak,
+    });
+
+    const date = todayInToronto(now());
+    recordRegisteredVisit(db, date, req.user.id);
+
+    res.json(merged);
   });
 
   app.post('/api/auth/logout', (req, res, next) => {
@@ -196,6 +248,30 @@ function createApp(db, options = {}) {
     const date = todayInToronto(now());
     const isNewVisit = recordGuestVisit(db, date, guestId);
     res.json({ ok: true, date, newVisit: isNewVisit });
+  });
+
+  app.post('/api/analytics/win', (req, res) => {
+    const { mode } = req.body || {};
+    if (mode !== 'daily' && mode !== 'free') {
+      return res.status(400).json({ error: 'Invalid mode.' });
+    }
+    const date = todayInToronto(now());
+    recordWin(db, date, mode);
+    res.json({ ok: true });
+  });
+
+  app.get('/api/admin/metrics', (req, res) => {
+    const adminSecret = options.adminSecret || process.env.ADMIN_SECRET || 'dev-secret-token';
+    const clientToken = req.headers['x-admin-token'] || req.query.token;
+    if (!clientToken || clientToken !== adminSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const rows = db.prepare('SELECT date, guests, registered, puzzle_wins, free_wins FROM daily_analytics ORDER BY date').all();
+    res.json(rows);
+  });
+
+  app.get('/admin/analytics', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
   });
 
   const publicDir = path.join(__dirname, 'public');

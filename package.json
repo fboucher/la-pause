@@ -6,7 +6,8 @@
   "author": "Frank Boucher",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "analytics": "node tools/analytics.js"
   },
   "dependencies": {
     "express": "^5.2.1",
