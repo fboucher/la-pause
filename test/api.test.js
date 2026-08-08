@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { openDatabase, todayInToronto, recordGuestVisit } = require('../db');
+const { openDatabase, todayInToronto, recordGuestVisit, findUser, findUserById, upsertUser } = require('../db');
 const { createApp } = require('../server');
 
 function listen(app) {
@@ -11,8 +11,8 @@ function listen(app) {
   });
 }
 
-async function start(t, db, options) {
-  const app = createApp(db, options);
+async function start(t, db, options = {}) {
+  const app = createApp(db, { sessionSecret: 'test-secret-key-12345', ...options });
   const { srv, port } = await listen(app);
   t.after(() => new Promise((resolve) => srv.close(resolve)));
   return `http://127.0.0.1:${port}`;
@@ -103,3 +103,55 @@ test('GET /api/health responds ok', async (t) => {
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), { ok: true });
 });
+
+test('upsertUser inserts new user and updates existing user', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const u1 = upsertUser(db, {
+      provider: 'google',
+      providerId: '12345',
+      name: 'Alice',
+      email: 'alice@example.com',
+      avatar: 'https://avatar1.png',
+    });
+    assert.ok(u1.id);
+    assert.equal(u1.provider, 'google');
+    assert.equal(u1.provider_id, '12345');
+    assert.equal(u1.name, 'Alice');
+
+    const u1Fetched = findUserById(db, u1.id);
+    assert.equal(u1Fetched.name, 'Alice');
+
+    const u1Updated = upsertUser(db, {
+      provider: 'google',
+      providerId: '12345',
+      name: 'Alice Updated',
+      email: 'alice@example.com',
+      avatar: 'https://avatar2.png',
+    });
+    assert.equal(u1Updated.id, u1.id);
+    assert.equal(u1Updated.name, 'Alice Updated');
+    assert.equal(u1Updated.avatar, 'https://avatar2.png');
+  } finally {
+    db.close();
+  }
+});
+
+test('GET /api/auth/me returns authenticated: false when unauthenticated', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+  const res = await fetch(`${base}/api/auth/me`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { authenticated: false });
+});
+
+test('POST /api/auth/logout responds ok when unauthenticated', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+  const res = await fetch(`${base}/api/auth/logout`, { method: 'POST' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+});
+
