@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { openDatabase, todayInToronto, recordGuestVisit, findUser, findUserById, upsertUser } = require('../db');
+const { openDatabase, todayInToronto, recordGuestVisit, findUser, findUserById, upsertUser, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard } = require('../db');
 const { createApp } = require('../server');
 
 function listen(app) {
@@ -292,6 +292,135 @@ test('GET /auth/mock is forbidden in production unless ALLOW_MOCK_AUTH is set', 
   const base = await start(t, db);
   const res = await fetch(`${base}/auth/mock`);
   assert.equal(res.status, 403);
+});
+
+test('submitDailyScore keeps the best score per user per day', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const alice = upsertUser(db, { provider: 'test', providerId: 'ld1', name: 'Alice' });
+
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 6, 1, '2026-08-08T12:00:01Z'), { recorded: true, moves: 6, hints: 1 });
+    // worse score is rejected
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 7, 0, '2026-08-08T12:00:02Z'), { recorded: false, moves: 6, hints: 1 });
+    // same moves, more hints is rejected
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 6, 2, '2026-08-08T12:00:03Z'), { recorded: false, moves: 6, hints: 1 });
+    // same moves, fewer hints improves
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 6, 0, '2026-08-08T12:00:04Z'), { recorded: true, moves: 6, hints: 0 });
+  } finally {
+    db.close();
+  }
+});
+
+test('getDailyLeaderboard ranks by moves, then hints, then submission time', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const alice = upsertUser(db, { provider: 'test', providerId: 'ld2', name: 'Alice' });
+    const bob = upsertUser(db, { provider: 'test', providerId: 'ld3', name: 'Bob' });
+    const carol = upsertUser(db, { provider: 'test', providerId: 'ld4', name: 'Carol' });
+
+    submitDailyScore(db, '2026-08-08', alice.id, 6, 1, '2026-08-08T12:00:01Z');
+    submitDailyScore(db, '2026-08-08', bob.id, 5, 0, '2026-08-08T12:00:02Z');
+    submitDailyScore(db, '2026-08-08', carol.id, 6, 0, '2026-08-08T12:00:03Z');
+    // Alice improves later — her submission time becomes the improvement time
+    submitDailyScore(db, '2026-08-08', alice.id, 5, 0, '2026-08-08T12:00:04Z');
+
+    const board = getDailyLeaderboard(db, '2026-08-08');
+    assert.equal(board.length, 3);
+    assert.deepEqual(board.map((e) => e.name), ['Bob', 'Alice', 'Carol']);
+    assert.deepEqual(board.map((e) => e.moves), [5, 5, 6]);
+    assert.deepEqual(board.map((e) => e.hints), [0, 0, 0]);
+
+    const otherDay = getDailyLeaderboard(db, '2026-08-07');
+    assert.equal(otherDay.length, 0);
+  } finally {
+    db.close();
+  }
+});
+
+test('submitFreeWin merges wins with Math.max', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const alice = upsertUser(db, { provider: 'test', providerId: 'lf1', name: 'Alice' });
+    assert.deepEqual(submitFreeWin(db, alice.id, 3, '2026-08-08T12:00:01Z'), { wins: 3 });
+    // lower value is ignored
+    assert.deepEqual(submitFreeWin(db, alice.id, 1, '2026-08-08T12:00:02Z'), { wins: 3 });
+    // higher value wins
+    assert.deepEqual(submitFreeWin(db, alice.id, 5, '2026-08-08T12:00:03Z'), { wins: 5 });
+  } finally {
+    db.close();
+  }
+});
+
+test('getFreeLeaderboard ranks by wins descending', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const alice = upsertUser(db, { provider: 'test', providerId: 'lf2', name: 'Alice' });
+    const bob = upsertUser(db, { provider: 'test', providerId: 'lf3', name: 'Bob' });
+    submitFreeWin(db, alice.id, 3, '2026-08-08T12:00:01Z');
+    submitFreeWin(db, bob.id, 7, '2026-08-08T12:00:02Z');
+
+    const board = getFreeLeaderboard(db);
+    assert.equal(board.length, 2);
+    assert.deepEqual(board.map((e) => e.name), ['Bob', 'Alice']);
+    assert.deepEqual(board.map((e) => e.wins), [7, 3]);
+  } finally {
+    db.close();
+  }
+});
+
+test('POST /api/leaderboard/daily requires auth and validates the payload', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const fixedNow = new Date('2026-08-08T12:00:00Z');
+  const base = await start(t, db, { now: () => fixedNow });
+
+  const unauth = await post(base, '/api/leaderboard/daily', { moves: 5, hints: 0 });
+  assert.equal(unauth.status, 401);
+
+  const mockUser = upsertUser(db, { provider: 'test', providerId: 'ld-api', name: 'Alice' });
+  // authenticated app uses the same db but needs a fresh server with mockUser
+  const base2 = await start(t, db, { now: () => fixedNow, mockUser });
+
+  const bad1 = await post(base2, '/api/leaderboard/daily', { moves: 0, hints: 0 });
+  assert.equal(bad1.status, 400);
+  const bad2 = await post(base2, '/api/leaderboard/daily', { moves: 5, hints: -1 });
+  assert.equal(bad2.status, 400);
+
+  const ok = await post(base2, '/api/leaderboard/daily', { moves: 5, hints: 1 }).then((r) => r.json());
+  assert.equal(ok.ok, true);
+  assert.equal(ok.recorded, true);
+  assert.equal(ok.date, '2026-08-08');
+
+  const board = await fetch(`${base2}/api/leaderboard/daily`).then((r) => r.json());
+  assert.equal(board.date, '2026-08-08');
+  assert.equal(board.entries.length, 1);
+  assert.equal(board.entries[0].name, 'Alice');
+  assert.equal(board.entries[0].moves, 5);
+  assert.equal(board.entries[0].hints, 1);
+});
+
+test('POST /api/leaderboard/unlimited requires auth and merges wins', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const fixedNow = new Date('2026-08-08T12:00:00Z');
+
+  const mockUser = upsertUser(db, { provider: 'test', providerId: 'lf-api', name: 'Alice' });
+  const base = await start(t, db, { now: () => fixedNow, mockUser });
+
+  const bad = await post(base, '/api/leaderboard/unlimited', { wins: -1 });
+  assert.equal(bad.status, 400);
+
+  const r1 = await post(base, '/api/leaderboard/unlimited', { wins: 4 }).then((r) => r.json());
+  assert.equal(r1.ok, true);
+  assert.equal(r1.wins, 4);
+
+  const r2 = await post(base, '/api/leaderboard/unlimited', { wins: 2 }).then((r) => r.json());
+  assert.equal(r2.wins, 4);
+
+  const board = await fetch(`${base}/api/leaderboard/unlimited`).then((r) => r.json());
+  assert.equal(board.entries.length, 1);
+  assert.equal(board.entries[0].wins, 4);
+  assert.equal(board.entries[0].name, 'Alice');
 });
 
 

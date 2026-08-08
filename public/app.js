@@ -35,7 +35,7 @@ let dailyStart = null;
 
 let mode = 'daily';
 let dailyGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
-let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false };
+let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false, freeWinRecorded: false };
 let tokens = 0;
 let stats = { wins: 0, streak: 0, best: 0, played: 0, playedDate: null, lastWin: null, dist: {} };
 
@@ -82,6 +82,15 @@ const els = {
   mockBtn: $('#mock-btn'),
   modalClose: $('#modal-close'),
   modalBackdrop: $('.modal-backdrop'),
+  leaderboardBtn: $('#leaderboard-btn'),
+  leaderboardModal: $('#leaderboard-modal'),
+  lbTabDaily: $('#lb-tab-daily'),
+  lbTabUnlimited: $('#lb-tab-unlimited'),
+  lbList: $('#lb-list'),
+  lbGuestPrompt: $('#lb-guest-prompt'),
+  lbSignin: $('#lb-signin'),
+  lbClose: $('#lb-close'),
+  lbBackdrop: $('#leaderboard-modal .modal-backdrop'),
 };
 
 function game() {
@@ -193,7 +202,8 @@ function restore() {
         solved: !!saved.free.solved,
         hintsUsed: saved.free.hintsUsed !== undefined ? saved.free.hintsUsed : (saved.free.hintUsed ? 1 : 0),
         tokenAwarded: !!saved.free.tokenAwarded,
-        freeHintUsed: !!saved.free.freeHintUsed
+        freeHintUsed: !!saved.free.freeHintUsed,
+        freeWinRecorded: !!saved.free.freeWinRecorded
       };
     } else {
       newFreeGame();
@@ -216,7 +226,7 @@ function randomStart() {
 }
 
 function newFreeGame() {
-  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false };
+  freeGame = { start: randomStart(), moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false, freeWinRecorded: false };
 }
 
 function parOf(word) {
@@ -290,6 +300,15 @@ function recordWin() {
   stats.streak = stats.lastWin === yesterdayStr() ? stats.streak + 1 : 1;
   stats.best = Math.max(stats.best, stats.streak);
   stats.lastWin = todayStr();
+  saveStats();
+}
+
+function recordFreeWin() {
+  if (mode !== 'free') return;
+  const g = game();
+  if (g.freeWinRecorded) return;
+  g.freeWinRecorded = true;
+  stats.freeWins = (stats.freeWins || 0) + 1;
   saveStats();
 }
 
@@ -484,6 +503,12 @@ function changedIndex(prev, word) {
   return -1;
 }
 
+function dictionaryUrl(word) {
+  return `https://www.larousse.fr/dictionnaires/francais/${word}`;
+}
+
+const DICT_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`;
+
 function stepHTML(g, all, word, index) {
   const ci = index > 0 ? changedIndex(all[index - 1], word) : -1;
   let letters = '';
@@ -499,7 +524,8 @@ function stepHTML(g, all, word, index) {
   }
   const note = index === 0 ? 'départ' : '';
   const cur = index === steps(g);
-  return `<li class="step${cur ? ' current' : ''}"><a href="https://www.larousse.fr/dictionnaires/francais/${word}" target="_blank" rel="noopener noreferrer" class="num" title="See word definition">${index}</a><span class="word">${letters}</span><span class="note">${note}</span></li>`;
+  const dictLabel = `Voir la définition de ${word.toUpperCase()}`;
+  return `<li class="step${cur ? ' current' : ''}"><span class="num">${index}</span><span class="word">${letters}</span><a href="${dictionaryUrl(word)}" target="_blank" rel="noopener noreferrer" class="dict" aria-label="${dictLabel}" title="${dictLabel}">${DICT_ICON}</a><span class="note">${note}</span></li>`;
 }
 
 function buildSlots() {
@@ -690,7 +716,7 @@ function handleWin() {
     g.tokenAwarded = true;
     saveTokens();
   }
-  if (mode === 'daily') recordWin();
+  if (mode === 'daily') recordWin(); else recordFreeWin();
   saveState();
   saveStats();
 
@@ -702,6 +728,7 @@ function handleWin() {
 
   if (currentUser) {
     syncWithCloud().catch(() => {});
+    syncLeaderboard().catch(() => {});
   }
 
   renderAll();
@@ -900,6 +927,7 @@ async function checkAuth() {
     if (json.authenticated && json.user) {
       currentUser = json.user;
       await syncWithCloud();
+      await syncLeaderboard();
     } else {
       currentUser = null;
     }
@@ -907,6 +935,26 @@ async function checkAuth() {
     currentUser = null;
   }
   renderUserAuth();
+}
+
+async function syncLeaderboard() {
+  if (!currentUser) return;
+  try {
+    if (dailyGame.solved) {
+      await fetch('/api/leaderboard/daily', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moves: dailyGame.moves.length, hints: dailyGame.hintsUsed || 0 }),
+      });
+    }
+    await fetch('/api/leaderboard/unlimited', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wins: stats.freeWins || 0 }),
+    });
+  } catch (e) {
+    console.error('Failed to sync leaderboard:', e);
+  }
 }
 
 function renderUserAuth() {
@@ -944,6 +992,70 @@ async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
   } catch (e) {}
   window.location.reload();
+}
+
+/* ---------------- leaderboard ---------------- */
+
+let leaderboardTab = 'daily';
+let leaderboardRequest = 0;
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function openLeaderboard() {
+  if (els.leaderboardModal) els.leaderboardModal.hidden = false;
+  if (els.lbGuestPrompt) els.lbGuestPrompt.hidden = currentUser !== null;
+  loadLeaderboard(leaderboardTab, true);
+}
+
+function closeLeaderboard() {
+  if (els.leaderboardModal) els.leaderboardModal.hidden = true;
+}
+
+async function loadLeaderboard(tab, force) {
+  if (!force && tab === leaderboardTab) return;
+  leaderboardTab = tab;
+  if (els.lbTabDaily) els.lbTabDaily.classList.toggle('is-active', tab === 'daily');
+  if (els.lbTabUnlimited) els.lbTabUnlimited.classList.toggle('is-active', tab === 'unlimited');
+  if (els.lbList) els.lbList.innerHTML = '<p class="lb-loading">Chargement…</p>';
+  const reqId = ++leaderboardRequest;
+  try {
+    const url = tab === 'daily' ? '/api/leaderboard/daily' : '/api/leaderboard/unlimited';
+    const res = await fetch(url);
+    const json = await res.json();
+    if (reqId !== leaderboardRequest) return;
+    renderLeaderboard(json.entries || [], tab);
+  } catch (e) {
+    if (reqId !== leaderboardRequest) return;
+    if (els.lbList) els.lbList.innerHTML = '<p class="lb-empty">Impossible de charger le classement.</p>';
+  }
+}
+
+function renderLeaderboard(entries, tab) {
+  if (!entries || entries.length === 0) {
+    els.lbList.innerHTML = '<p class="lb-empty">Aucun joueur inscrit pour l\'instant.</p>';
+    return;
+  }
+  const medals = ['🥇', '🥈', '🥉'];
+  const rows = entries.map((e, i) => {
+    const rank = i + 1;
+    const badge = rank <= 3
+      ? `<span class="lb-medal">${medals[rank - 1]}</span>`
+      : `<span class="lb-rank">${rank}</span>`;
+    const name = escapeHtml(e.name || 'Joueur');
+    const avatar = e.avatar
+      ? `<img class="lb-avatar" src="${escapeHtml(e.avatar)}" alt="" loading="lazy">`
+      : `<span class="lb-avatar lb-avatar-placeholder">${escapeHtml(name.charAt(0).toUpperCase())}</span>`;
+    const score = tab === 'daily'
+      ? `${e.moves} coup${e.moves > 1 ? 's' : ''}${e.hints ? ` · ${e.hints} conseil${e.hints > 1 ? 's' : ''}` : ''}`
+      : `${e.wins} victoire${e.wins > 1 ? 's' : ''}`;
+    const me = currentUser && currentUser.id === e.id ? ' lb-me' : '';
+    return `<div class="lb-row${me}">${badge}<span class="lb-avatar-wrap">${avatar}</span><span class="lb-name">${name}</span><span class="lb-score">${score}</span></div>`;
+  }).join('');
+  els.lbList.innerHTML = rows;
 }
 
 /* ---------------- init ---------------- */
@@ -1019,10 +1131,22 @@ async function init() {
     }
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && els.authModal && !els.authModal.hidden) {
-      closeAuthModal();
-    }
+    if (e.key !== 'Escape') return;
+    if (els.authModal && !els.authModal.hidden) closeAuthModal();
+    else if (els.leaderboardModal && !els.leaderboardModal.hidden) closeLeaderboard();
   });
+
+  if (els.leaderboardBtn) els.leaderboardBtn.addEventListener('click', openLeaderboard);
+  if (els.lbClose) els.lbClose.addEventListener('click', closeLeaderboard);
+  if (els.lbBackdrop) els.lbBackdrop.addEventListener('click', closeLeaderboard);
+  if (els.lbTabDaily) els.lbTabDaily.addEventListener('click', () => loadLeaderboard('daily'));
+  if (els.lbTabUnlimited) els.lbTabUnlimited.addEventListener('click', () => loadLeaderboard('unlimited'));
+  if (els.lbSignin) {
+    els.lbSignin.addEventListener('click', () => {
+      closeLeaderboard();
+      openAuthModal();
+    });
+  }
 
   buildSlots();
   renderAll();

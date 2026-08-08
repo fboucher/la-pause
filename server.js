@@ -7,7 +7,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GitHubStrategy = require('passport-github2').Strategy;
-const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin } = require('./db');
+const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard } = require('./db');
 
 function loadEnv() {
   const envPath = path.join(__dirname, '.env');
@@ -279,6 +279,44 @@ function createApp(db, options = {}) {
     const date = todayInToronto(now());
     recordWin(db, date, mode);
     res.json({ ok: true });
+  });
+
+  app.post('/api/leaderboard/daily', (req, res) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const { moves, hints } = req.body || {};
+    const m = Number.parseInt(moves, 10);
+    const h = Number.parseInt(hints, 10);
+    if (!Number.isInteger(m) || m < 1 || !Number.isInteger(h) || h < 0) {
+      return res.status(400).json({ error: 'Invalid score.' });
+    }
+    const date = todayInToronto(now());
+    const result = submitDailyScore(db, date, req.user.id, m, h, now().toISOString());
+    res.json({ ok: true, date, ...result });
+  });
+
+  app.get('/api/leaderboard/daily', (req, res) => {
+    const raw = req.query.date;
+    const date = typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayInToronto(now());
+    res.json({ date, entries: getDailyLeaderboard(db, date) });
+  });
+
+  app.post('/api/leaderboard/unlimited', (req, res) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const { wins } = req.body || {};
+    const w = Number.parseInt(wins, 10);
+    if (!Number.isInteger(w) || w < 0) {
+      return res.status(400).json({ error: 'Invalid wins.' });
+    }
+    const result = submitFreeWin(db, req.user.id, w, now().toISOString());
+    res.json({ ok: true, ...result });
+  });
+
+  app.get('/api/leaderboard/unlimited', (req, res) => {
+    res.json({ entries: getFreeLeaderboard(db) });
   });
 
   app.get('/api/admin/metrics', (req, res) => {

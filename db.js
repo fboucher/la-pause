@@ -44,6 +44,21 @@ CREATE TABLE IF NOT EXISTS daily_registered_visits (
   user_id INTEGER NOT NULL REFERENCES users(id),
   PRIMARY KEY (date, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS leaderboard_daily (
+  date TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  moves INTEGER NOT NULL,
+  hints INTEGER NOT NULL DEFAULT 0,
+  submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (date, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS leaderboard_free (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  wins INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 function openDatabase(file) {
@@ -152,6 +167,63 @@ function recordWin(db, date, mode) {
   ).run(date);
 }
 
+function isBetterDailyScore(existing, moves, hints) {
+  if (existing.moves !== moves) return moves < existing.moves;
+  return hints < existing.hints;
+}
+
+function submitDailyScore(db, date, userId, moves, hints, submittedAt = new Date().toISOString()) {
+  const existing = db
+    .prepare('SELECT moves, hints FROM leaderboard_daily WHERE date = ? AND user_id = ?')
+    .get(date, userId);
+  if (existing && !isBetterDailyScore(existing, moves, hints)) {
+    return { recorded: false, moves: existing.moves, hints: existing.hints };
+  }
+  db.prepare(
+    `INSERT INTO leaderboard_daily (date, user_id, moves, hints, submitted_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(date, user_id) DO UPDATE SET
+       moves = excluded.moves,
+       hints = excluded.hints,
+       submitted_at = excluded.submitted_at`
+  ).run(date, userId, moves, hints, submittedAt);
+  return { recorded: true, moves, hints };
+}
+
+function getDailyLeaderboard(db, date) {
+  return db
+    .prepare(
+      `SELECT u.id, u.name, u.avatar, l.moves, l.hints
+       FROM leaderboard_daily l
+       JOIN users u ON u.id = l.user_id
+       WHERE l.date = ?
+       ORDER BY l.moves ASC, l.hints ASC, l.submitted_at ASC
+       LIMIT 50`
+    )
+    .all(date);
+}
+
+function submitFreeWin(db, userId, wins, updatedAt = new Date().toISOString()) {
+  const current = db.prepare('SELECT wins FROM leaderboard_free WHERE user_id = ?').get(userId) || { wins: 0 };
+  const mergedWins = Math.max(current.wins, wins);
+  db.prepare(
+    `INSERT INTO leaderboard_free (user_id, wins, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET wins = excluded.wins, updated_at = excluded.updated_at`
+  ).run(userId, mergedWins, updatedAt);
+  return { wins: mergedWins };
+}
+
+function getFreeLeaderboard(db) {
+  return db
+    .prepare(
+      `SELECT u.id, u.name, u.avatar, l.wins
+       FROM leaderboard_free l
+       JOIN users u ON u.id = l.user_id
+       ORDER BY l.wins DESC, l.updated_at ASC
+       LIMIT 50`
+    )
+    .all();
+}
+
 module.exports = {
   openDatabase,
   todayInToronto,
@@ -163,5 +235,9 @@ module.exports = {
   syncPlayerStats,
   recordRegisteredVisit,
   recordWin,
+  submitDailyScore,
+  getDailyLeaderboard,
+  submitFreeWin,
+  getFreeLeaderboard,
 };
 
