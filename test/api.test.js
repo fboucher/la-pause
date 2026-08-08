@@ -1,0 +1,105 @@
+'use strict';
+
+const { test } = require('node:test');
+const assert = require('node:assert');
+const { openDatabase, todayInToronto, recordGuestVisit } = require('../db');
+const { createApp } = require('../server');
+
+function listen(app) {
+  return new Promise((resolve) => {
+    const srv = app.listen(0, () => resolve({ srv, port: srv.address().port }));
+  });
+}
+
+async function start(t, db, options) {
+  const app = createApp(db, options);
+  const { srv, port } = await listen(app);
+  t.after(() => new Promise((resolve) => srv.close(resolve)));
+  return `http://127.0.0.1:${port}`;
+}
+
+function post(base, path, body) {
+  return fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('heartbeat records unique daily guest visits non-destructively', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const fixedNow = new Date('2026-08-06T12:00:00Z');
+  const base = await start(t, db, { now: () => fixedNow });
+
+  const r1 = await post(base, '/api/analytics/heartbeat', { guestId: 'guest-1' }).then((r) => r.json());
+  assert.equal(r1.ok, true);
+  assert.equal(r1.newVisit, true);
+  assert.equal(r1.date, todayInToronto(fixedNow));
+
+  const r2 = await post(base, '/api/analytics/heartbeat', { guestId: 'guest-1' }).then((r) => r.json());
+  assert.equal(r2.newVisit, false);
+
+  await post(base, '/api/analytics/heartbeat', { guestId: 'guest-2' });
+
+  const row = db.prepare('SELECT date, guests, registered, puzzle_wins, free_wins FROM daily_analytics').get();
+  assert.equal(row.date, '2026-08-06');
+  assert.equal(row.guests, 2);
+  assert.equal(row.registered, 0);
+  assert.equal(row.puzzle_wins, 0);
+  assert.equal(row.free_wins, 0);
+});
+
+test('heartbeat rolls over to a new daily row on the next day', async (t) => {
+  let current = new Date('2026-08-06T23:00:00Z');
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db, { now: () => current });
+
+  await post(base, '/api/analytics/heartbeat', { guestId: 'guest-1' });
+  current = new Date('2026-08-07T12:00:00Z');
+  await post(base, '/api/analytics/heartbeat', { guestId: 'guest-1' });
+
+  const rows = db.prepare('SELECT date, guests FROM daily_analytics ORDER BY date').all();
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.guests), [1, 1]);
+});
+
+test('heartbeat rejects invalid payloads with 400', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+
+  for (const body of [{}, { guestId: 42 }, { guestId: 'a b' }, { guestId: '' }]) {
+    const res = await post(base, '/api/analytics/heartbeat', body);
+    assert.equal(res.status, 400, `expected 400 for ${JSON.stringify(body)}`);
+  }
+  const visits = db.prepare('SELECT COUNT(*) AS n FROM daily_guest_visits').get();
+  assert.equal(visits.n, 0);
+});
+
+test('recordGuestVisit upserts into daily_analytics directly', () => {
+  const db = openDatabase(':memory:');
+  try {
+    assert.equal(recordGuestVisit(db, '2026-08-06', 'g1'), true);
+    assert.equal(recordGuestVisit(db, '2026-08-06', 'g1'), false);
+    assert.equal(recordGuestVisit(db, '2026-08-06', 'g2'), true);
+    assert.equal(recordGuestVisit(db, '2026-08-07', 'g1'), true);
+    const rows = db.prepare('SELECT date, guests FROM daily_analytics ORDER BY date').all();
+    assert.deepEqual(rows, [
+      { date: '2026-08-06', guests: 2 },
+      { date: '2026-08-07', guests: 1 },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
+test('GET /api/health responds ok', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+  const res = await fetch(`${base}/api/health`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+});
