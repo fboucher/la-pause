@@ -40,7 +40,7 @@ function createApp(db, options = {}) {
     throw new Error('SESSION_SECRET environment variable is required.');
   }
 
-  app.set('trust proxy', 1);
+  app.set('trust proxy', true);
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
 
@@ -90,7 +90,7 @@ function createApp(db, options = {}) {
         {
           clientID: googleClientId,
           clientSecret: googleClientSecret,
-          callbackURL: options.googleCallbackURL || '/auth/google/callback',
+          callbackURL: options.googleCallbackURL || process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
         },
         (accessToken, refreshToken, profile, done) => {
           try {
@@ -118,7 +118,7 @@ function createApp(db, options = {}) {
         {
           clientID: githubClientId,
           clientSecret: githubClientSecret,
-          callbackURL: options.githubCallbackURL || '/auth/github/callback',
+          callbackURL: options.githubCallbackURL || process.env.GITHUB_CALLBACK_URL || '/auth/github/callback',
         },
         (accessToken, refreshToken, profile, done) => {
           try {
