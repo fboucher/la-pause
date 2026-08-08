@@ -275,7 +275,7 @@ test('GET /auth/mock logs in a mock user and redirects', async (t) => {
   assert.equal(res.headers.get('location'), '/');
   
   // Verify user was upserted in users table
-  const user = db.prepare('SELECT * FROM users WHERE provider = "mock" AND provider_id = "dev-user"').get();
+  const user = db.prepare("SELECT * FROM users WHERE provider = 'mock' AND provider_id = 'dev-user'").get();
   assert.ok(user);
   assert.equal(user.name, 'Développeur Café');
 });
