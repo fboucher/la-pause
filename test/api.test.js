@@ -265,4 +265,33 @@ test('authenticated calls record registered player visits in daily analytics', a
   assert.equal(row2.registered, 1);
 });
 
+test('GET /auth/mock logs in a mock user and redirects', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+  
+  const res = await fetch(`${base}/auth/mock`, { redirect: 'manual' });
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get('location'), '/');
+  
+  // Verify user was upserted in users table
+  const user = db.prepare('SELECT * FROM users WHERE provider = "mock" AND provider_id = "dev-user"').get();
+  assert.ok(user);
+  assert.equal(user.name, 'Développeur Café');
+});
+
+test('GET /auth/mock is forbidden in production unless ALLOW_MOCK_AUTH is set', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  
+  // Mock NODE_ENV as production
+  const originalEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  t.after(() => { process.env.NODE_ENV = originalEnv; });
+  
+  const base = await start(t, db);
+  const res = await fetch(`${base}/auth/mock`);
+  assert.equal(res.status, 403);
+});
+
 

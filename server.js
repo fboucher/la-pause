@@ -167,6 +167,27 @@ function createApp(db, options = {}) {
     })(req, res, next);
   });
 
+  app.get('/auth/mock', (req, res, next) => {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_MOCK_AUTH !== 'true') {
+      return res.status(403).json({ error: 'Mock auth not allowed in production.' });
+    }
+    try {
+      const user = upsertUser(db, {
+        provider: 'mock',
+        providerId: 'dev-user',
+        name: 'Développeur Café',
+        email: 'dev@c5m.ca',
+        avatar: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%236F4E37"/><text x="50" y="60" font-size="30" text-anchor="middle" fill="white">☕</text></svg>'
+      });
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.redirect('/');
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.get('/api/auth/me', (req, res) => {
     if (req.isAuthenticated && req.isAuthenticated()) {
       const date = todayInToronto(now());

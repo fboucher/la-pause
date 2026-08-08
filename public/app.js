@@ -79,6 +79,7 @@ const els = {
   authModal: $('#auth-modal'),
   googleBtn: $('#google-btn'),
   githubBtn: $('#github-btn'),
+  mockBtn: $('#mock-btn'),
   modalClose: $('#modal-close'),
   modalBackdrop: $('.modal-backdrop'),
 };
@@ -942,6 +943,7 @@ async function init() {
 
   if (isDev) {
     els.devBadge.hidden = false;
+    if (els.mockBtn) els.mockBtn.hidden = false;
   }
 
   stats = Object.assign(stats, loadJSON(STATS_KEY) || {});
@@ -978,6 +980,9 @@ async function init() {
   }
   if (els.githubBtn) {
     els.githubBtn.addEventListener('click', () => { window.location.href = '/auth/github'; });
+  }
+  if (els.mockBtn) {
+    els.mockBtn.addEventListener('click', () => { window.location.href = '/auth/mock'; });
   }
   if (els.userBadge) {
     els.userBadge.addEventListener('click', (e) => {
