@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS daily_guest_visits (
   guest_id TEXT NOT NULL,
   PRIMARY KEY (date, guest_id)
 );
+
+CREATE TABLE IF NOT EXISTS daily_registered_visits (
+  date TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  PRIMARY KEY (date, user_id)
+);
 `;
 
 function openDatabase(file) {
@@ -98,6 +104,54 @@ function upsertUser(db, { provider, providerId, name = null, email = null, avata
   return findUser(db, provider, providerId);
 }
 
+function getPlayerStats(db, userId) {
+  const row = db
+    .prepare('SELECT tokens, wins, streak, best_streak FROM player_stats WHERE user_id = ?')
+    .get(userId);
+  return row || { tokens: 0, wins: 0, streak: 0, best_streak: 0 };
+}
+
+function syncPlayerStats(db, userId, { tokens = 0, wins = 0, streak = 0, best_streak = 0 }) {
+  const current = getPlayerStats(db, userId);
+  const merged = {
+    tokens: Math.max(current.tokens, tokens),
+    wins: Math.max(current.wins, wins),
+    streak: Math.max(current.streak, streak),
+    best_streak: Math.max(current.best_streak, best_streak),
+  };
+  db.prepare(
+    `INSERT INTO player_stats (user_id, tokens, wins, streak, best_streak, updated_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET
+       tokens = excluded.tokens,
+       wins = excluded.wins,
+       streak = excluded.streak,
+       best_streak = excluded.best_streak,
+       updated_at = datetime('now')`
+  ).run(userId, merged.tokens, merged.wins, merged.streak, merged.best_streak);
+  return merged;
+}
+
+function recordRegisteredVisit(db, date, userId) {
+  const inserted = db
+    .prepare('INSERT OR IGNORE INTO daily_registered_visits (date, user_id) VALUES (?, ?)')
+    .run(date, userId);
+  if (inserted.changes === 0) return false;
+  db.prepare(
+    `INSERT INTO daily_analytics (date, registered) VALUES (?, 1)
+     ON CONFLICT(date) DO UPDATE SET registered = registered + 1`
+  ).run(date);
+  return true;
+}
+
+function recordWin(db, date, mode) {
+  const col = mode === 'daily' ? 'puzzle_wins' : 'free_wins';
+  db.prepare(
+    `INSERT INTO daily_analytics (date, ${col}) VALUES (?, 1)
+     ON CONFLICT(date) DO UPDATE SET ${col} = ${col} + 1`
+  ).run(date);
+}
+
 module.exports = {
   openDatabase,
   todayInToronto,
@@ -105,5 +159,9 @@ module.exports = {
   findUser,
   findUserById,
   upsertUser,
+  getPlayerStats,
+  syncPlayerStats,
+  recordRegisteredVisit,
+  recordWin,
 };
 

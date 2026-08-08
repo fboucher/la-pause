@@ -155,3 +155,114 @@ test('POST /api/auth/logout responds ok when unauthenticated', async (t) => {
   assert.deepEqual(await res.json(), { ok: true });
 });
 
+test('GET /api/user/profile returns 401 when unauthenticated', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+  const res = await fetch(`${base}/api/user/profile`);
+  assert.equal(res.status, 401);
+});
+
+test('POST /api/user/sync returns 401 when unauthenticated', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+  const res = await post(base, '/api/user/sync', { tokens: 5 });
+  assert.equal(res.status, 401);
+});
+
+test('GET /api/user/profile returns user details and default stats for new user', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  
+  const mockUser = upsertUser(db, { provider: 'test', providerId: '99', name: 'Bob' });
+  const base = await start(t, db, { mockUser });
+  
+  const res = await fetch(`${base}/api/user/profile`).then((r) => r.json());
+  assert.equal(res.id, mockUser.id);
+  assert.equal(res.name, 'Bob');
+  assert.deepEqual(res.stats, { tokens: 0, wins: 0, streak: 0, best_streak: 0 });
+});
+
+test('POST /api/user/sync merges stats non-destructively with Math.max', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  
+  const mockUser = upsertUser(db, { provider: 'test', providerId: '100', name: 'Charlie' });
+  const base = await start(t, db, { mockUser });
+  
+  // First sync: server is 0, client is tokens=5, wins=3, streak=2, best_streak=4
+  const res1 = await post(base, '/api/user/sync', { tokens: 5, wins: 3, streak: 2, best_streak: 4 }).then((r) => r.json());
+  assert.deepEqual(res1, { tokens: 5, wins: 3, streak: 2, best_streak: 4 });
+  
+  // Second sync: client is tokens=2 (lower), wins=4 (higher), streak=1 (lower), best_streak=3 (lower)
+  const res2 = await post(base, '/api/user/sync', { tokens: 2, wins: 4, streak: 1, best_streak: 3 }).then((r) => r.json());
+  assert.deepEqual(res2, { tokens: 5, wins: 4, streak: 2, best_streak: 4 });
+});
+
+test('POST /api/analytics/win updates daily wins in analytics', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const fixedNow = new Date('2026-08-08T12:00:00Z');
+  const base = await start(t, db, { now: () => fixedNow });
+  
+  const res1 = await post(base, '/api/analytics/win', { mode: 'daily' }).then((r) => r.json());
+  assert.equal(res1.ok, true);
+  
+  await post(base, '/api/analytics/win', { mode: 'free' });
+  await post(base, '/api/analytics/win', { mode: 'daily' });
+  
+  const row = db.prepare('SELECT date, puzzle_wins, free_wins FROM daily_analytics').get();
+  assert.equal(row.date, '2026-08-08');
+  assert.equal(row.puzzle_wins, 2);
+  assert.equal(row.free_wins, 1);
+});
+
+test('GET /api/admin/metrics returns 401 if token is invalid, 200 if valid', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db, { adminSecret: 'secret-token-xyz' });
+  
+  // Unauthorized
+  const res1 = await fetch(`${base}/api/admin/metrics`);
+  assert.equal(res1.status, 401);
+  
+  const res2 = await fetch(`${base}/api/admin/metrics?token=wrong`);
+  assert.equal(res2.status, 401);
+  
+  // Authorized via query param
+  const res3 = await fetch(`${base}/api/admin/metrics?token=secret-token-xyz`);
+  assert.equal(res3.status, 200);
+  const data3 = await res3.json();
+  assert.ok(Array.isArray(data3));
+  
+  // Authorized via header
+  const res4 = await fetch(`${base}/api/admin/metrics`, {
+    headers: { 'x-admin-token': 'secret-token-xyz' }
+  });
+  assert.equal(res4.status, 200);
+});
+
+test('authenticated calls record registered player visits in daily analytics', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const fixedNow = new Date('2026-08-08T12:00:00Z');
+  
+  const mockUser = upsertUser(db, { provider: 'test', providerId: '101', name: 'Dave' });
+  const base = await start(t, db, { mockUser, now: () => fixedNow });
+  
+  // Call profile to trigger registered active visit logging
+  await fetch(`${base}/api/user/profile`);
+  
+  // Check daily analytics registered count
+  const row = db.prepare('SELECT date, registered FROM daily_analytics').get();
+  assert.equal(row.date, '2026-08-08');
+  assert.equal(row.registered, 1);
+  
+  // Another call from the same user on the same day shouldn't double count
+  await fetch(`${base}/api/auth/me`);
+  const row2 = db.prepare('SELECT registered FROM daily_analytics').get();
+  assert.equal(row2.registered, 1);
+});
+
+

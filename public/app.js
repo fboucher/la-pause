@@ -674,6 +674,17 @@ function handleWin() {
   if (mode === 'daily') recordWin();
   saveState();
   saveStats();
+
+  fetch('/api/analytics/win', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode })
+  }).catch(() => {});
+
+  if (currentUser) {
+    syncWithCloud().catch(() => {});
+  }
+
   renderAll();
   flashMessage('PAUSE atteinte !', 'ok');
 }
@@ -832,6 +843,36 @@ function useNextWordHint() {
 
 let currentUser = null;
 
+async function syncWithCloud() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch('/api/user/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tokens: tokens,
+        wins: stats.wins,
+        streak: stats.streak,
+        best_streak: stats.best
+      })
+    });
+    if (res.ok) {
+      const merged = await res.json();
+      if (merged) {
+        tokens = merged.tokens;
+        stats.wins = merged.wins;
+        stats.streak = merged.streak;
+        stats.best = merged.best_streak;
+        saveTokens();
+        saveStats();
+        renderAll();
+      }
+    }
+  } catch (e) {
+    console.error('Failed to sync with cloud:', e);
+  }
+}
+
 async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me');
@@ -839,6 +880,7 @@ async function checkAuth() {
     const json = await res.json();
     if (json.authenticated && json.user) {
       currentUser = json.user;
+      await syncWithCloud();
     } else {
       currentUser = null;
     }

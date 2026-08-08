@@ -11,6 +11,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY db.js server.js ./
+COPY tools/analytics.js ./tools/analytics.js
 COPY --from=build /app/public ./public
 
 EXPOSE 3000
