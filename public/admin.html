@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>La Pause — Tableau de bord analytique</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --cream: #F7F1E4;
+      --card: #FDFAF2;
+      --espresso: #33241B;
+      --coffee: #6F4E37;
+      --latte: #C9A17E;
+      --muted: #9B8A78;
+      --line: #E7DCC8;
+      --accent: #B4603A;
+      --ok: #4C7A50;
+      --danger: #B3402A;
+      --shadow: 0 4px 6px rgba(51, 36, 27, 0.05), 0 10px 30px rgba(51, 36, 27, 0.08);
+      --radius: 12px;
+    }
+
+    [data-theme="dark"] {
+      --cream: #1C130E;
+      --card: #2B1D16;
+      --espresso: #FDFAF2;
+      --coffee: #C9A17E;
+      --latte: #A6845F;
+      --muted: #8E7A6B;
+      --line: #3D2D24;
+      --accent: #D76F4B;
+      --ok: #639A67;
+      --danger: #D2533B;
+      --shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(1200px 500px at 50% -100px, rgba(201, 161, 126, 0.2), transparent 70%), var(--cream);
+      color: var(--espresso);
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      color: var(--coffee);
+      font-weight: 800;
+    }
+
+    .back-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+    .back-link:hover {
+      color: var(--coffee);
+    }
+
+    /* Auth Prompt card */
+    #auth-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 2.5rem;
+      max-width: 450px;
+      margin: 5rem auto;
+      text-align: center;
+    }
+
+    #auth-card h2 {
+      margin-bottom: 1rem;
+      color: var(--coffee);
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--espresso);
+    }
+
+    input[type="password"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--line);
+      background: var(--cream);
+      color: var(--espresso);
+      border-radius: 6px;
+      outline: none;
+      font-size: 1rem;
+    }
+
+    input[type="password"]:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+      width: 100%;
+    }
+
+    .btn:hover {
+      background: var(--coffee);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .error-msg {
+      color: var(--danger);
+      margin-top: 1rem;
+      font-weight: 600;
+    }
+
+    /* Dashboard Layout */
+    #dashboard {
+      display: none;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      text-align: center;
+      transition: transform 0.2s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .stat-val {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+      font-size: 0.875rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+    }
+
+    @media (max-width: 500px) {
+      .charts-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+    }
+
+    .chart-card h3 {
+      margin-bottom: 1rem;
+      color: var(--coffee);
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .table-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      overflow-x: auto;
+      margin-bottom: 3rem;
+    }
+
+    .table-card h3 {
+      margin-bottom: 1.25rem;
+      color: var(--coffee);
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 0.5px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(111, 78, 55, 0.02);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Tableau de bord analytique ☕</h1>
+      <a href="/" class="back-link">← Retour au jeu</a>
+    </header>
+
+    <!-- Authentication Form -->
+    <div id="auth-card">
+      <h2>Accès sécurisé</h2>
+      <p style="color: var(--muted); margin-bottom: 1.5rem; font-size: 0.9rem;">
+        Veuillez entrer le jeton secret administrateur pour voir les statistiques.
+      </p>
+      <form id="auth-form">
+        <div class="form-group">
+          <label for="admin-token">Jeton secret</label>
+          <input type="password" id="admin-token" required placeholder="Jeton d'accès...">
+        </div>
+        <button type="submit" class="btn">Se connecter</button>
+      </form>
+      <div id="auth-error" class="error-msg" style="display: none;">Jeton incorrect.</div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard">
+      <!-- Summary metrics -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-val" id="total-guests">0</div>
+          <div class="stat-label">Total Visiteurs (Invités)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="total-registered">0</div>
+          <div class="stat-label">Total Joueurs Connectés</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="total-puzzle-wins">0</div>
+          <div class="stat-label">Victoires Quotidiennes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="total-free-wins">0</div>
+          <div class="stat-label">Victoires Illimitées</div>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Joueurs actifs quotidiens</h3>
+          <div style="position: relative; height: 300px;">
+            <canvas id="activePlayersChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>Victoires par mode</h3>
+          <div style="position: relative; height: 300px;">
+            <canvas id="winsChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Raw metrics table -->
+      <div class="table-card">
+        <h3>Historique des métriques</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Visiteurs (Invités)</th>
+              <th>Joueurs Connectés</th>
+              <th>Victoires Quotidiennes</th>
+              <th>Victoires Illimitées</th>
+            </tr>
+          </thead>
+          <tbody id="metrics-table-body">
+            <!-- Populated via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Automatically match dark theme from main site or system preference
+    if (localStorage.getItem('lapause.theme') === 'dark' || 
+        (!localStorage.getItem('lapause.theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+
+    const authCard = document.getElementById('auth-card');
+    const dashboard = document.getElementById('dashboard');
+    const authForm = document.getElementById('auth-form');
+    const adminTokenInput = document.getElementById('admin-token');
+    const authError = document.getElementById('auth-error');
+
+    // Parse token from query parameter or sessionStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    let token = urlParams.get('token') || sessionStorage.getItem('admin_token');
+
+    if (token) {
+      loadDashboard(token);
+    }
+
+    authForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const enteredToken = adminTokenInput.value.trim();
+      loadDashboard(enteredToken);
+    });
+
+    async function loadDashboard(enteredToken) {
+      try {
+        const res = await fetch(`/api/admin/metrics?token=${encodeURIComponent(enteredToken)}`);
+        if (!res.ok) {
+          throw new Error('Unauthorized');
+        }
+        const data = await res.json();
+        
+        // Cache correct token
+        sessionStorage.setItem('admin_token', enteredToken);
+        authCard.style.display = 'none';
+        dashboard.style.display = 'block';
+
+        renderDashboard(data);
+      } catch (err) {
+        authError.style.display = 'block';
+        sessionStorage.removeItem('admin_token');
+      }
+    }
+
+    function renderDashboard(data) {
+      // Aggregate totals
+      let totalGuests = 0;
+      let totalRegistered = 0;
+      let totalPuzzleWins = 0;
+      let totalFreeWins = 0;
+
+      const labels = [];
+      const guestsData = [];
+      const registeredData = [];
+      const puzzleWinsData = [];
+      const freeWinsData = [];
+
+      const tbody = document.getElementById('metrics-table-body');
+      tbody.innerHTML = '';
+
+      // Loop in order (chronological)
+      data.forEach(row => {
+        totalGuests += row.guests;
+        totalRegistered += row.registered;
+        totalPuzzleWins += row.puzzle_wins;
+        totalFreeWins += row.free_wins;
+
+        labels.push(row.date);
+        guestsData.push(row.guests);
+        registeredData.push(row.registered);
+        puzzleWinsData.push(row.puzzle_wins);
+        freeWinsData.push(row.free_wins);
+
+        // Prepend to table to show most recent first
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${row.date}</strong></td>
+          <td>${row.guests}</td>
+          <td>${row.registered}</td>
+          <td>${row.puzzle_wins}</td>
+          <td>${row.free_wins}</td>
+        `;
+        tbody.insertBefore(tr, tbody.firstChild);
+      });
+
+      document.getElementById('total-guests').textContent = totalGuests;
+      document.getElementById('total-registered').textContent = totalRegistered;
+      document.getElementById('total-puzzle-wins').textContent = totalPuzzleWins;
+      document.getElementById('total-free-wins').textContent = totalFreeWins;
+
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const textColor = isDark ? '#FDFAF2' : '#33241B';
+      const gridColor = isDark ? '#3d2d24' : '#E7DCC8';
+
+      // Render Charts
+      // Active Players Chart
+      new Chart(document.getElementById('activePlayersChart'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Visiteurs (Invités)',
+              data: guestsData,
+              backgroundColor: '#C9A17E',
+              borderColor: '#6F4E37',
+              borderWidth: 1
+            },
+            {
+              label: 'Joueurs Connectés',
+              data: registeredData,
+              backgroundColor: '#B4603A',
+              borderColor: '#33241B',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: textColor } }
+          },
+          scales: {
+            x: { 
+              grid: { color: gridColor },
+              ticks: { color: textColor }
+            },
+            y: { 
+              grid: { color: gridColor },
+              ticks: { color: textColor, stepSize: 1 }
+            }
+          }
+        }
+      });
+
+      // Wins Chart
+      new Chart(document.getElementById('winsChart'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Quotidien',
+              data: puzzleWinsData,
+              borderColor: '#4C7A50',
+              backgroundColor: 'rgba(76, 122, 80, 0.1)',
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Illimité',
+              data: freeWinsData,
+              borderColor: '#B4603A',
+              backgroundColor: 'rgba(180, 96, 58, 0.1)',
+              tension: 0.3,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: textColor } }
+          },
+          scales: {
+            x: { 
+              grid: { color: gridColor },
+              ticks: { color: textColor }
+            },
+            y: { 
+              grid: { color: gridColor },
+              ticks: { color: textColor, stepSize: 1 }
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

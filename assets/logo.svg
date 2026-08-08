@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 84" width="120" height="84">
+  <defs>
+    <style>
+      .steam {
+        fill: none;
+        stroke: #C9A17E;
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        opacity: 0;
+        animation: steam 3.4s ease-in-out infinite;
+      }
+      .steam.s1 { animation-delay: 0s; }
+      .steam.s2 { animation-delay: 1.1s; }
+      .steam.s3 { animation-delay: 2.2s; }
+      @keyframes steam {
+        0%   { opacity: 0; transform: translateY(6px) scaleY(0.85); }
+        30%  { opacity: 0.85; }
+        70%  { opacity: 0.45; }
+        100% { opacity: 0; transform: translateY(-10px) scaleY(1.1); }
+      }
+    </style>
+  </defs>
+  <path class="steam s1" d="M42 24 q6 -12 0 -22"/>
+  <path class="steam s2" d="M60 27 q6 -12 0 -22"/>
+  <path class="steam s3" d="M78 24 q-6 -12 0 -22"/>
+  <path d="M30 40 h62 v12 a9 9 0 0 1 -9 9 H39 a9 9 0 0 1 -9 -9 Z" fill="#6F4E37"/>
+  <path d="M92 42 h11 a8 8 0 0 1 0 16 H92" fill="none" stroke="#6F4E37" stroke-width="4" stroke-linecap="round"/>
+  <path d="M28 63 h66" stroke="#A6845F" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -4,5 +4,13 @@ services:
     image: fboucher/la-pause:latest
     container_name: la-pause-web
     ports:
-      - "8080:80"
+      - "3000:3000"
+    volumes:
+      - lapause-data:/app/data
+    env_file:
+      - .env
     restart: unless-stopped
+
+volumes:
+  lapause-data:
+
