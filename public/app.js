@@ -1,3 +1,5 @@
+import { createValidation, normalize, changedIndex } from './validation.js';
+
 const $ = (sel) => document.querySelector(sel);
 
 // Theme handling
@@ -30,6 +32,7 @@ let devShared = false;
 
 let data = null;
 let wordSet = new Set();
+let validator = null;
 let wordIndex = new Map();
 
 let mode = 'espresso';
@@ -263,31 +266,6 @@ function lastWord() {
 
 /* ---------------- validation ---------------- */
 
-function normalize(word) {
-  return word.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
-
-function diffCount(a, b) {
-  let n = 0;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++;
-  return n;
-}
-
-function validate(raw) {
-  if (!/^[\u00C0-\u00FFa-zA-Z]{5}$/.test(raw.trim())) {
-    return { ok: false, msg: 'Tapez 5 lettres.' };
-  }
-  const w = normalize(raw.trim());
-  if (!wordSet.has(w)) {
-    return { ok: false, msg: `« ${w.toUpperCase()} » n'est pas dans le dictionnaire.` };
-  }
-  const d = diffCount(lastWord(), w);
-  if (d !== 1) {
-    return { ok: false, msg: 'Changez exactement une lettre.' };
-  }
-  return { ok: true, word: w };
-}
-
 /* ---------------- stats ---------------- */
 
 function checkStreakStaleness() {
@@ -513,11 +491,6 @@ function flashMessage(text, cls) {
 }
 
 /* ---------------- rendering ---------------- */
-
-function changedIndex(prev, word) {
-  for (let i = 0; i < prev.length; i++) if (prev[i] !== word[i]) return i;
-  return -1;
-}
 
 function dictionaryUrl(word) {
   return `https://www.larousse.fr/dictionnaires/francais/${word}`;
@@ -756,7 +729,7 @@ function handleWin() {
 function submitGuess(ev) {
   ev.preventDefault();
   if (isSolved()) return;
-  const res = validate(els.input.value);
+  const res = validator.validate(els.input.value, lastWord());
   if (!res.ok) {
     els.message.textContent = res.msg;
     els.message.className = 'message error';
@@ -1087,6 +1060,7 @@ async function init() {
   const res = await fetch(`data.json?v=${Date.now()}`);
   data = await res.json();
   wordSet = new Set(data.words);
+  validator = createValidation(wordSet);
   wordIndex = new Map(data.words.map((w, i) => [w, i]));
 
   if (data.appVersion) {
