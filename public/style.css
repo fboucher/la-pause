@@ -19,6 +19,7 @@
 
   /* Theme variables for light mode */
   --tabs-bg: #EFE5D1;
+  --tabs-bg-free: #E4DAC6;
   --btn-hover: #F1E9D6;
   --dist-track: #F0E8D6;
   --current-cell-bg: #FBF6EA;
@@ -38,6 +39,7 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
 
   --tabs-bg: #221711;
+  --tabs-bg-free: #31221A;
   --btn-hover: #33241B;
   --dist-track: #221711;
   --current-cell-bg: #35261F;
@@ -82,6 +84,39 @@ body {
   justify-content: center;
   transition: background 0.15s, transform 0.1s;
   outline: none;
+}
+
+.help-toggle {
+  position: absolute;
+  top: 24px;
+  right: 64px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--coffee);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  outline: none;
+}
+
+.help-toggle:hover {
+  background: var(--btn-hover);
+}
+
+.help-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.help-toggle:active {
+  transform: scale(0.95);
 }
 
 .theme-toggle:hover {
@@ -178,18 +213,38 @@ h1 {
 
 .tabs {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: center;
   margin: 22px 0 14px;
+}
+
+.tabs-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px;
   background: var(--tabs-bg);
   border-radius: 999px;
 }
 
+.tabs-group--free {
+  background: var(--tabs-bg-free);
+}
+
+.tabs-group-label {
+  padding: 0 4px 0 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .tab {
-  flex: 1;
-  max-width: 220px;
-  padding: 8px 12px;
+  min-width: 108px;
+  padding: 8px 14px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -873,6 +928,25 @@ h1 {
   margin: 0 0 20px;
   font-size: 0.88rem;
   color: var(--muted);
+}
+
+.help-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 20px;
+  text-align: left;
+}
+
+.help-rules p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--espresso);
+}
+
+.help-rules strong {
+  color: var(--coffee);
 }
 
 .auth-providers {

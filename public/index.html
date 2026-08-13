@@ -12,6 +12,7 @@
 <body>
   <div class="page">
     <header class="header">
+      <button id="help-btn" class="help-toggle" type="button" aria-label="Comment jouer ?" title="Comment jouer ?">?</button>
       <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Changer de thème">
         <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"></circle>
@@ -65,8 +66,14 @@
     </header>
 
     <nav class="tabs" aria-label="Mode de jeu">
-      <button id="tab-daily" class="tab is-active" type="button">Quotidienne</button>
-      <button id="tab-free" class="tab" type="button">Illimitée</button>
+      <div class="tabs-group" role="group" aria-label="Quotidien">
+        <span class="tabs-group-label" aria-hidden="true">Quotidien</span>
+        <button id="tab-espresso" class="tab is-active" type="button">Espresso</button>
+        <button id="tab-latte" class="tab" type="button">Latte</button>
+      </div>
+      <div class="tabs-group tabs-group--free">
+        <button id="tab-free" class="tab" type="button">Illimité</button>
+      </div>
     </nav>
 
     <main id="app">
@@ -127,7 +134,7 @@
 
     <footer class="footer">
       <p>Lexique : liste de mots français ouverte (<a href="https://github.com/words/an-array-of-french-words" target="_blank" rel="noopener noreferrer">an-array-of-french-words</a>), normalisée sans accents.</p>
-      <p>Chaque jour, un nouveau mot pour rejoindre <strong>PAUSE</strong>.</p>
+      <p>Chaque jour, deux nouveaux défis — espresso et latte — pour rejoindre <strong>PAUSE</strong>.</p>
       <div class="footer-info">
         <span class="footer-left"><a href="https://fboucheros.com" target="_blank" rel="noopener noreferrer">By Frank</a></span>
         <span class="footer-center">c5m</span>
@@ -163,7 +170,8 @@
     <div class="modal-card">
       <h2 id="leaderboard-title">Classement</h2>
       <div class="lb-tabs">
-        <button id="lb-tab-daily" class="lb-tab is-active" type="button">Quotidienne</button>
+        <button id="lb-tab-espresso" class="lb-tab is-active" type="button">Espresso</button>
+        <button id="lb-tab-latte" class="lb-tab" type="button">Latte</button>
         <button id="lb-tab-unlimited" class="lb-tab" type="button">Illimitée</button>
       </div>
       <p id="lb-guest-prompt" class="lb-prompt" hidden>
@@ -172,6 +180,21 @@
       </p>
       <div id="lb-list" class="lb-list" aria-live="polite"></div>
       <button id="lb-close" class="btn btn-secondary" type="button">Fermer</button>
+    </div>
+  </div>
+
+  <div id="help-modal" class="modal" hidden role="dialog" aria-labelledby="help-title" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h2 id="help-title">Comment jouer ?</h2>
+      <div class="help-rules">
+        <p>Partez du mot affiché et rejoignez <strong>PAUSE</strong>.</p>
+        <p>À chaque coup, changez <strong>exactement une lettre</strong> pour former un mot français valide.</p>
+        <p><strong>Espresso</strong> : le défi difficile du jour (par ≥ 5). <strong>Latte</strong> : le défi facile (par 2–4). <strong>Illimité</strong> : jouez librement, sans limite.</p>
+        <p>Un <strong>conseil</strong> vous indique une position (1 🪙) ou le mot suivant (2 🪙). Gagnez 1 🪙 en résolvant sans indice.</p>
+        <p>À la résolution : 3 étoiles sans indice, 2 avec un indice, 1 sinon.</p>
+      </div>
+      <button id="help-close" class="btn btn-primary" type="button">C'est parti !</button>
     </div>
   </div>
 

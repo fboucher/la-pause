@@ -47,11 +47,12 @@ CREATE TABLE IF NOT EXISTS daily_registered_visits (
 
 CREATE TABLE IF NOT EXISTS leaderboard_daily (
   date TEXT NOT NULL,
+  challenge TEXT NOT NULL DEFAULT 'espresso',
   user_id INTEGER NOT NULL REFERENCES users(id),
   moves INTEGER NOT NULL,
   hints INTEGER NOT NULL DEFAULT 0,
   submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (date, user_id)
+  PRIMARY KEY (date, challenge, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS leaderboard_free (
@@ -61,6 +62,28 @@ CREATE TABLE IF NOT EXISTS leaderboard_free (
 );
 `;
 
+function migrate(db) {
+  const cols = db.prepare('PRAGMA table_info(leaderboard_daily)').all();
+  if (cols.some((c) => c.name === 'challenge')) return;
+  db.exec('PRAGMA foreign_keys = OFF;');
+  db.exec(`
+    ALTER TABLE leaderboard_daily RENAME TO leaderboard_daily_legacy;
+    CREATE TABLE leaderboard_daily (
+      date TEXT NOT NULL,
+      challenge TEXT NOT NULL DEFAULT 'espresso',
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      moves INTEGER NOT NULL,
+      hints INTEGER NOT NULL DEFAULT 0,
+      submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (date, challenge, user_id)
+    );
+    INSERT INTO leaderboard_daily (date, challenge, user_id, moves, hints, submitted_at)
+      SELECT date, 'espresso', user_id, moves, hints, submitted_at FROM leaderboard_daily_legacy;
+    DROP TABLE leaderboard_daily_legacy;
+  `);
+  db.exec('PRAGMA foreign_keys = ON;');
+}
+
 function openDatabase(file) {
   if (file !== ':memory:') {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -68,6 +91,7 @@ function openDatabase(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -160,11 +184,15 @@ function recordRegisteredVisit(db, date, userId) {
 }
 
 function recordWin(db, date, mode) {
-  const col = mode === 'daily' ? 'puzzle_wins' : 'free_wins';
+  const col = mode === 'espresso' || mode === 'latte' ? 'puzzle_wins' : 'free_wins';
   db.prepare(
     `INSERT INTO daily_analytics (date, ${col}) VALUES (?, 1)
      ON CONFLICT(date) DO UPDATE SET ${col} = ${col} + 1`
   ).run(date);
+}
+
+function isDailyChallenge(value) {
+  return value === 'espresso' || value === 'latte';
 }
 
 function isBetterDailyScore(existing, moves, hints) {
@@ -172,34 +200,34 @@ function isBetterDailyScore(existing, moves, hints) {
   return hints < existing.hints;
 }
 
-function submitDailyScore(db, date, userId, moves, hints, submittedAt = new Date().toISOString()) {
+function submitDailyScore(db, date, challenge, userId, moves, hints, submittedAt = new Date().toISOString()) {
   const existing = db
-    .prepare('SELECT moves, hints FROM leaderboard_daily WHERE date = ? AND user_id = ?')
-    .get(date, userId);
+    .prepare('SELECT moves, hints FROM leaderboard_daily WHERE date = ? AND challenge = ? AND user_id = ?')
+    .get(date, challenge, userId);
   if (existing && !isBetterDailyScore(existing, moves, hints)) {
     return { recorded: false, moves: existing.moves, hints: existing.hints };
   }
   db.prepare(
-    `INSERT INTO leaderboard_daily (date, user_id, moves, hints, submitted_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(date, user_id) DO UPDATE SET
+    `INSERT INTO leaderboard_daily (date, challenge, user_id, moves, hints, submitted_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(date, challenge, user_id) DO UPDATE SET
        moves = excluded.moves,
        hints = excluded.hints,
        submitted_at = excluded.submitted_at`
-  ).run(date, userId, moves, hints, submittedAt);
+  ).run(date, challenge, userId, moves, hints, submittedAt);
   return { recorded: true, moves, hints };
 }
 
-function getDailyLeaderboard(db, date) {
+function getDailyLeaderboard(db, date, challenge = 'espresso') {
   return db
     .prepare(
       `SELECT u.id, u.name, u.avatar, l.moves, l.hints
        FROM leaderboard_daily l
        JOIN users u ON u.id = l.user_id
-       WHERE l.date = ?
+       WHERE l.date = ? AND l.challenge = ?
        ORDER BY l.moves ASC, l.hints ASC, l.submitted_at ASC
        LIMIT 50`
     )
-    .all(date);
+    .all(date, challenge);
 }
 
 function submitFreeWin(db, userId, wins, updatedAt = new Date().toISOString()) {
@@ -235,6 +263,7 @@ module.exports = {
   syncPlayerStats,
   recordRegisteredVisit,
   recordWin,
+  isDailyChallenge,
   submitDailyScore,
   getDailyLeaderboard,
   submitFreeWin,

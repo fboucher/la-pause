@@ -2,6 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
+const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
 const { openDatabase, todayInToronto, recordGuestVisit, findUser, findUserById, upsertUser, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard } = require('../db');
 const { createApp } = require('../server');
 
@@ -200,22 +202,33 @@ test('POST /api/user/sync merges stats non-destructively with Math.max', async (
   assert.deepEqual(res2, { tokens: 5, wins: 4, streak: 2, best_streak: 4 });
 });
 
-test('POST /api/analytics/win updates daily wins in analytics', async (t) => {
+test('POST /api/analytics/win counts both daily challenges as puzzle wins', async (t) => {
   const db = openDatabase(':memory:');
   t.after(() => db.close());
   const fixedNow = new Date('2026-08-08T12:00:00Z');
   const base = await start(t, db, { now: () => fixedNow });
-  
-  const res1 = await post(base, '/api/analytics/win', { mode: 'daily' }).then((r) => r.json());
+
+  const res1 = await post(base, '/api/analytics/win', { mode: 'espresso' }).then((r) => r.json());
   assert.equal(res1.ok, true);
-  
+
+  await post(base, '/api/analytics/win', { mode: 'latte' });
   await post(base, '/api/analytics/win', { mode: 'free' });
-  await post(base, '/api/analytics/win', { mode: 'daily' });
-  
+
   const row = db.prepare('SELECT date, puzzle_wins, free_wins FROM daily_analytics').get();
   assert.equal(row.date, '2026-08-08');
   assert.equal(row.puzzle_wins, 2);
   assert.equal(row.free_wins, 1);
+});
+
+test('POST /api/analytics/win rejects unknown modes with 400', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+
+  for (const mode of ['daily', 'mocha', '']) {
+    const res = await post(base, '/api/analytics/win', { mode });
+    assert.equal(res.status, 400, `expected 400 for mode "${mode}"`);
+  }
 });
 
 test('GET /api/admin/metrics returns 401 if token is invalid, 200 if valid', async (t) => {
@@ -294,18 +307,39 @@ test('GET /auth/mock is forbidden in production unless ALLOW_MOCK_AUTH is set', 
   assert.equal(res.status, 403);
 });
 
-test('submitDailyScore keeps the best score per user per day', () => {
+test('submitDailyScore keeps the best score per user per challenge per day', () => {
   const db = openDatabase(':memory:');
   try {
     const alice = upsertUser(db, { provider: 'test', providerId: 'ld1', name: 'Alice' });
 
-    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 6, 1, '2026-08-08T12:00:01Z'), { recorded: true, moves: 6, hints: 1 });
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 6, 1, '2026-08-08T12:00:01Z'), { recorded: true, moves: 6, hints: 1 });
     // worse score is rejected
-    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 7, 0, '2026-08-08T12:00:02Z'), { recorded: false, moves: 6, hints: 1 });
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 7, 0, '2026-08-08T12:00:02Z'), { recorded: false, moves: 6, hints: 1 });
     // same moves, more hints is rejected
-    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 6, 2, '2026-08-08T12:00:03Z'), { recorded: false, moves: 6, hints: 1 });
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 6, 2, '2026-08-08T12:00:03Z'), { recorded: false, moves: 6, hints: 1 });
     // same moves, fewer hints improves
-    assert.deepEqual(submitDailyScore(db, '2026-08-08', alice.id, 6, 0, '2026-08-08T12:00:04Z'), { recorded: true, moves: 6, hints: 0 });
+    assert.deepEqual(submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 6, 0, '2026-08-08T12:00:04Z'), { recorded: true, moves: 6, hints: 0 });
+  } finally {
+    db.close();
+  }
+});
+
+test('submitDailyScore stores espresso and latte scores as separate rows', () => {
+  const db = openDatabase(':memory:');
+  try {
+    const alice = upsertUser(db, { provider: 'test', providerId: 'ld1b', name: 'Alice' });
+
+    submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 6, 1, '2026-08-08T12:00:01Z');
+    submitDailyScore(db, '2026-08-08', 'latte', alice.id, 3, 0, '2026-08-08T12:00:02Z');
+    // re-submitting the espresso score must not touch the latte row
+    submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 5, 1, '2026-08-08T12:00:03Z');
+
+    const rows = db.prepare('SELECT challenge, moves FROM leaderboard_daily ORDER BY challenge').all();
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows, [
+      { challenge: 'espresso', moves: 5 },
+      { challenge: 'latte', moves: 3 },
+    ]);
   } finally {
     db.close();
   }
@@ -318,20 +352,22 @@ test('getDailyLeaderboard ranks by moves, then hints, then submission time', () 
     const bob = upsertUser(db, { provider: 'test', providerId: 'ld3', name: 'Bob' });
     const carol = upsertUser(db, { provider: 'test', providerId: 'ld4', name: 'Carol' });
 
-    submitDailyScore(db, '2026-08-08', alice.id, 6, 1, '2026-08-08T12:00:01Z');
-    submitDailyScore(db, '2026-08-08', bob.id, 5, 0, '2026-08-08T12:00:02Z');
-    submitDailyScore(db, '2026-08-08', carol.id, 6, 0, '2026-08-08T12:00:03Z');
+    submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 6, 1, '2026-08-08T12:00:01Z');
+    submitDailyScore(db, '2026-08-08', 'espresso', bob.id, 5, 0, '2026-08-08T12:00:02Z');
+    submitDailyScore(db, '2026-08-08', 'espresso', carol.id, 6, 0, '2026-08-08T12:00:03Z');
     // Alice improves later — her submission time becomes the improvement time
-    submitDailyScore(db, '2026-08-08', alice.id, 5, 0, '2026-08-08T12:00:04Z');
+    submitDailyScore(db, '2026-08-08', 'espresso', alice.id, 5, 0, '2026-08-08T12:00:04Z');
 
-    const board = getDailyLeaderboard(db, '2026-08-08');
+    const board = getDailyLeaderboard(db, '2026-08-08', 'espresso');
     assert.equal(board.length, 3);
     assert.deepEqual(board.map((e) => e.name), ['Bob', 'Alice', 'Carol']);
     assert.deepEqual(board.map((e) => e.moves), [5, 5, 6]);
     assert.deepEqual(board.map((e) => e.hints), [0, 0, 0]);
 
-    const otherDay = getDailyLeaderboard(db, '2026-08-07');
+    const otherDay = getDailyLeaderboard(db, '2026-08-07', 'espresso');
     assert.equal(otherDay.length, 0);
+    // the latte board for the same day is unaffected
+    assert.equal(getDailyLeaderboard(db, '2026-08-08', 'latte').length, 0);
   } finally {
     db.close();
   }
@@ -368,35 +404,109 @@ test('getFreeLeaderboard ranks by wins descending', () => {
   }
 });
 
-test('POST /api/leaderboard/daily requires auth and validates the payload', async (t) => {
+test('POST /api/leaderboard/daily requires auth, a valid challenge, and a valid score', async (t) => {
   const db = openDatabase(':memory:');
   t.after(() => db.close());
   const fixedNow = new Date('2026-08-08T12:00:00Z');
   const base = await start(t, db, { now: () => fixedNow });
 
-  const unauth = await post(base, '/api/leaderboard/daily', { moves: 5, hints: 0 });
+  const unauth = await post(base, '/api/leaderboard/daily', { challenge: 'espresso', moves: 5, hints: 0 });
   assert.equal(unauth.status, 401);
 
   const mockUser = upsertUser(db, { provider: 'test', providerId: 'ld-api', name: 'Alice' });
   // authenticated app uses the same db but needs a fresh server with mockUser
   const base2 = await start(t, db, { now: () => fixedNow, mockUser });
 
-  const bad1 = await post(base2, '/api/leaderboard/daily', { moves: 0, hints: 0 });
+  const noChallenge = await post(base2, '/api/leaderboard/daily', { moves: 5, hints: 0 });
+  assert.equal(noChallenge.status, 400);
+  const badChallenge = await post(base2, '/api/leaderboard/daily', { challenge: 'mocha', moves: 5, hints: 0 });
+  assert.equal(badChallenge.status, 400);
+  const bad1 = await post(base2, '/api/leaderboard/daily', { challenge: 'espresso', moves: 0, hints: 0 });
   assert.equal(bad1.status, 400);
-  const bad2 = await post(base2, '/api/leaderboard/daily', { moves: 5, hints: -1 });
+  const bad2 = await post(base2, '/api/leaderboard/daily', { challenge: 'espresso', moves: 5, hints: -1 });
   assert.equal(bad2.status, 400);
 
-  const ok = await post(base2, '/api/leaderboard/daily', { moves: 5, hints: 1 }).then((r) => r.json());
+  const ok = await post(base2, '/api/leaderboard/daily', { challenge: 'espresso', moves: 5, hints: 1 }).then((r) => r.json());
   assert.equal(ok.ok, true);
   assert.equal(ok.recorded, true);
   assert.equal(ok.date, '2026-08-08');
+  assert.equal(ok.challenge, 'espresso');
 
   const board = await fetch(`${base2}/api/leaderboard/daily`).then((r) => r.json());
   assert.equal(board.date, '2026-08-08');
+  assert.equal(board.challenge, 'espresso');
   assert.equal(board.entries.length, 1);
   assert.equal(board.entries[0].name, 'Alice');
   assert.equal(board.entries[0].moves, 5);
   assert.equal(board.entries[0].hints, 1);
+});
+
+test('POST /api/leaderboard/daily keeps espresso and latte boards separate', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const fixedNow = new Date('2026-08-08T12:00:00Z');
+  const mockUser = upsertUser(db, { provider: 'test', providerId: 'ld-api2', name: 'Alice' });
+  const base = await start(t, db, { now: () => fixedNow, mockUser });
+
+  const e1 = await post(base, '/api/leaderboard/daily', { challenge: 'espresso', moves: 5, hints: 0 }).then((r) => r.json());
+  const l1 = await post(base, '/api/leaderboard/daily', { challenge: 'latte', moves: 3, hints: 1 }).then((r) => r.json());
+  assert.equal(e1.recorded, true);
+  assert.equal(l1.recorded, true);
+
+  const espressoBoard = await fetch(`${base}/api/leaderboard/daily?challenge=espresso`).then((r) => r.json());
+  assert.equal(espressoBoard.challenge, 'espresso');
+  assert.equal(espressoBoard.entries.length, 1);
+  assert.equal(espressoBoard.entries[0].moves, 5);
+
+  const latteBoard = await fetch(`${base}/api/leaderboard/daily?challenge=latte`).then((r) => r.json());
+  assert.equal(latteBoard.challenge, 'latte');
+  assert.equal(latteBoard.entries.length, 1);
+  assert.equal(latteBoard.entries[0].moves, 3);
+
+  const invalid = await fetch(`${base}/api/leaderboard/daily?challenge=mocha`);
+  assert.equal(invalid.status, 400);
+});
+
+test('openDatabase migrates a legacy leaderboard_daily table and backfills challenge=espresso', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const tmp = path.join(os.tmpdir(), `lapause-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+  try {
+    let db = new DatabaseSync(tmp);
+    db.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        provider_id TEXT NOT NULL,
+        name TEXT,
+        email TEXT,
+        avatar TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (provider, provider_id)
+      );
+      CREATE TABLE leaderboard_daily (
+        date TEXT NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        moves INTEGER NOT NULL,
+        hints INTEGER NOT NULL DEFAULT 0,
+        submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (date, user_id)
+      );
+      INSERT INTO users (provider, provider_id, name) VALUES ('test', 'mig1', 'Alice');
+      INSERT INTO leaderboard_daily (date, user_id, moves, hints, submitted_at)
+        VALUES ('2026-08-08', 1, 5, 1, '2026-08-08T12:00:01Z');
+    `);
+    db.close();
+
+    db = openDatabase(tmp);
+    const cols = db.prepare('PRAGMA table_info(leaderboard_daily)').all();
+    assert.ok(cols.some((c) => c.name === 'challenge'));
+    const rows = db.prepare('SELECT date, challenge, user_id, moves FROM leaderboard_daily').all();
+    assert.deepEqual(rows, [{ date: '2026-08-08', challenge: 'espresso', user_id: 1, moves: 5 }]);
+    db.close();
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
 });
 
 test('POST /api/leaderboard/unlimited requires auth and merges wins', async (t) => {

@@ -1,3 +1,5 @@
+import { createValidation, normalize, changedIndex } from './validation.js';
+
 const $ = (sel) => document.querySelector(sel);
 
 // Theme handling
@@ -30,17 +32,19 @@ let devShared = false;
 
 let data = null;
 let wordSet = new Set();
+let validator = null;
 let wordIndex = new Map();
-let dailyStart = null;
 
-let mode = 'daily';
-let dailyGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+let mode = 'espresso';
+let espressoGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+let latteGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
 let freeGame = { start: '', moves: [], solved: false, hintsUsed: 0, tokenAwarded: false, freeHintUsed: false, freeWinRecorded: false };
 let tokens = 0;
 let stats = { wins: 0, streak: 0, best: 0, played: 0, playedDate: null, lastWin: null, dist: {} };
 
 const els = {
-  tabDaily: $('#tab-daily'),
+  tabEspresso: $('#tab-espresso'),
+  tabLatte: $('#tab-latte'),
   tabFree: $('#tab-free'),
   meta: $('#puzzle-meta'),
   ladder: $('#ladder'),
@@ -84,17 +88,23 @@ const els = {
   modalBackdrop: $('.modal-backdrop'),
   leaderboardBtn: $('#leaderboard-btn'),
   leaderboardModal: $('#leaderboard-modal'),
-  lbTabDaily: $('#lb-tab-daily'),
+  lbTabEspresso: $('#lb-tab-espresso'),
+  lbTabLatte: $('#lb-tab-latte'),
   lbTabUnlimited: $('#lb-tab-unlimited'),
   lbList: $('#lb-list'),
   lbGuestPrompt: $('#lb-guest-prompt'),
   lbSignin: $('#lb-signin'),
   lbClose: $('#lb-close'),
   lbBackdrop: $('#leaderboard-modal .modal-backdrop'),
+  helpBtn: $('#help-btn'),
+  helpModal: $('#help-modal'),
+  helpClose: $('#help-close'),
+  helpBackdrop: $('#help-modal .modal-backdrop'),
 };
 
 function game() {
-  return mode === 'daily' ? dailyGame : freeGame;
+  if (mode === 'free') return freeGame;
+  return mode === 'latte' ? latteGame : espressoGame;
 }
 
 /* ---------------- date helpers (America/Toronto) ---------------- */
@@ -139,8 +149,13 @@ function fnv1a(str) {
   return h >>> 0;
 }
 
-function dailyIndex() {
-  return fnv1a(todayStr()) % data.daily.length;
+function dailyStart(challenge) {
+  const pool = challenge === 'latte' ? data.dailyLatte : data.dailyEspresso;
+  return data.words[pool[fnv1a(`${todayStr()}:${challenge}`) % pool.length]];
+}
+
+function newDailyGame(challenge) {
+  return { start: dailyStart(challenge), moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
 }
 
 /* ---------------- persistence ---------------- */
@@ -150,7 +165,7 @@ function loadJSON(key) {
 }
 
 function saveState() {
-  const payload = { v: 1, date: todayStr(), daily: dailyGame, free: freeGame };
+  const payload = { v: 2, date: todayStr(), espresso: espressoGame, latte: latteGame, free: freeGame };
   try { localStorage.setItem(STATE_KEY, JSON.stringify(payload)); } catch {}
 }
 
@@ -183,18 +198,23 @@ function heartbeat() {
 
 function restore() {
   const saved = loadJSON(STATE_KEY);
-  if (saved && saved.date === todayStr()) {
-    if (saved.daily && wordSet.has(saved.daily.start)) {
-      dailyGame = {
-        start: saved.daily.start,
-        moves: [...saved.daily.moves],
-        solved: !!saved.daily.solved,
-        hintsUsed: saved.daily.hintsUsed !== undefined ? saved.daily.hintsUsed : (saved.daily.hintUsed ? 1 : 0),
-        tokenAwarded: !!saved.daily.tokenAwarded
+  const restoreDaily = (raw) => {
+    if (raw && wordSet.has(raw.start)) {
+      return {
+        start: raw.start,
+        moves: [...raw.moves],
+        solved: !!raw.solved,
+        hintsUsed: raw.hintsUsed !== undefined ? raw.hintsUsed : (raw.hintUsed ? 1 : 0),
+        tokenAwarded: !!raw.tokenAwarded
       };
-    } else {
-      dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
     }
+    return null;
+  };
+
+  if (saved && saved.date === todayStr()) {
+    // v1 payloads stored the single daily puzzle under `daily`; it is espresso's predecessor.
+    espressoGame = restoreDaily(saved.espresso || saved.daily) || newDailyGame('espresso');
+    latteGame = restoreDaily(saved.latte) || newDailyGame('latte');
     if (saved.free && wordSet.has(saved.free.start)) {
       freeGame = {
         start: saved.free.start,
@@ -209,7 +229,8 @@ function restore() {
       newFreeGame();
     }
   } else {
-    dailyGame = { start: dailyStart, moves: [], solved: false, hintsUsed: 0, tokenAwarded: false };
+    espressoGame = newDailyGame('espresso');
+    latteGame = newDailyGame('latte');
     newFreeGame();
   }
 }
@@ -249,31 +270,6 @@ function lastWord() {
 
 /* ---------------- validation ---------------- */
 
-function normalize(word) {
-  return word.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
-
-function diffCount(a, b) {
-  let n = 0;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++;
-  return n;
-}
-
-function validate(raw) {
-  if (!/^[\u00C0-\u00FFa-zA-Z]{5}$/.test(raw.trim())) {
-    return { ok: false, msg: 'Tapez 5 lettres.' };
-  }
-  const w = normalize(raw.trim());
-  if (!wordSet.has(w)) {
-    return { ok: false, msg: `« ${w.toUpperCase()} » n'est pas dans le dictionnaire.` };
-  }
-  const d = diffCount(lastWord(), w);
-  if (d !== 1) {
-    return { ok: false, msg: 'Changez exactement une lettre.' };
-  }
-  return { ok: true, word: w };
-}
-
 /* ---------------- stats ---------------- */
 
 function checkStreakStaleness() {
@@ -291,8 +287,8 @@ function recordPlay() {
 }
 
 function recordWin() {
-  if (mode !== 'daily') return;
-  if (stats.lastWin === todayStr()) return;
+  if (mode === 'free') return false;
+  if (stats.lastWin === todayStr()) return false;
   const g = game();
   const n = steps(g);
   stats.dist[n] = (stats.dist[n] || 0) + 1;
@@ -301,15 +297,17 @@ function recordWin() {
   stats.best = Math.max(stats.best, stats.streak);
   stats.lastWin = todayStr();
   saveStats();
+  return true;
 }
 
 function recordFreeWin() {
-  if (mode !== 'free') return;
+  if (mode !== 'free') return false;
   const g = game();
-  if (g.freeWinRecorded) return;
+  if (g.freeWinRecorded) return false;
   g.freeWinRecorded = true;
   stats.freeWins = (stats.freeWins || 0) + 1;
   saveStats();
+  return true;
 }
 
 /* ---------------- share ---------------- */
@@ -326,8 +324,8 @@ function shareText() {
   const par = parOf(g.start);
   const plur = n > 1 ? 's' : '';
   const stars = starRating(g.hintsUsed || 0);
-  if (mode === 'daily') {
-    return `${stars} La pause n°${puzzleNumber()} — rejoint PAUSE en ${n} coup${plur} (par ${par})\nc5m.ca/pause`;
+  if (mode === 'espresso' || mode === 'latte') {
+    return `${stars} La pause ${mode} n°${puzzleNumber()} — rejoint PAUSE en ${n} coup${plur} (par ${par})\nc5m.ca/pause`;
   }
   return `${stars} La pause (illimité) — rejoint PAUSE en ${n} coup${plur} (par ${par})\nc5m.ca/pause`;
 }
@@ -359,7 +357,7 @@ function generateShareImage(words) {
   const n = steps(g);
   const par = parOf(g.start);
   const plur = n > 1 ? 's' : '';
-  const label = mode === 'daily' ? `La pause n°${puzzleNumber()}` : 'La pause (illimité)';
+  const label = mode === 'espresso' || mode === 'latte' ? `La pause ${mode} n°${puzzleNumber()}` : 'La pause (illimité)';
   const scoreText = `rejoint PAUSE en ${n} coup${plur} (par ${par})`;
 
   ctx.textAlign = 'center';
@@ -498,11 +496,6 @@ function flashMessage(text, cls) {
 
 /* ---------------- rendering ---------------- */
 
-function changedIndex(prev, word) {
-  for (let i = 0; i < prev.length; i++) if (prev[i] !== word[i]) return i;
-  return -1;
-}
-
 function dictionaryUrl(word) {
   return `https://www.larousse.fr/dictionnaires/francais/${word}`;
 }
@@ -571,7 +564,7 @@ function getDifficultyClass(par) {
 
 function renderMeta() {
   const g = game();
-  const label = mode === 'daily' ? `Puzzle n°${puzzleNumber()}` : 'Mode illimité';
+  const label = mode === 'free' ? 'Mode illimité' : `${mode[0].toUpperCase()}${mode.slice(1)} n°${puzzleNumber()}`;
   const par = parOf(g.start);
   const diffLabel = getDifficultyLabel(par);
   const diffClass = getDifficultyClass(par);
@@ -587,7 +580,7 @@ function renderMeta() {
 
 function renderControls() {
   const solved = isSolved();
-  const locked = solved && mode === 'daily';
+  const locked = solved && mode !== 'free';
   els.undo.disabled = steps(game()) === 0 || locked;
   els.newGame.style.display = mode === 'free' ? '' : 'none';
   els.share.style.display = solved ? '' : 'none';
@@ -640,7 +633,7 @@ function renderSolved() {
 
   const n = steps(g);
   const par = parOf(g.start);
-  if (mode === 'daily') {
+  if (mode !== 'free') {
     const streakSuffix = stats.streak > 0 ? ` 🔥 Série : ${stats.streak} jour${stats.streak > 1 ? 's' : ''}.` : '';
     els.solvedText.textContent = `Vous avez rejoint PAUSE en ${n} coup${n > 1 ? 's' : ''} (par ${par}).${streakSuffix}`;
     const left = nextMidnight() - Date.now();
@@ -698,7 +691,7 @@ function commitMove(word) {
   devShared = false;
   const g = game();
   g.moves.push(word);
-  if (mode === 'daily') recordPlay();
+  if (mode !== 'free') recordPlay();
   saveState();
   renderMeta();
   renderLadder();
@@ -716,15 +709,17 @@ function handleWin() {
     g.tokenAwarded = true;
     saveTokens();
   }
-  if (mode === 'daily') recordWin(); else recordFreeWin();
+  const recorded = mode === 'free' ? recordFreeWin() : recordWin();
   saveState();
   saveStats();
 
-  fetch('/api/analytics/win', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode })
-  }).catch(() => {});
+  if (recorded) {
+    fetch('/api/analytics/win', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    }).catch(() => {});
+  }
 
   if (currentUser) {
     syncWithCloud().catch(() => {});
@@ -738,7 +733,7 @@ function handleWin() {
 function submitGuess(ev) {
   ev.preventDefault();
   if (isSolved()) return;
-  const res = validate(els.input.value);
+  const res = validator.validate(els.input.value, lastWord());
   if (!res.ok) {
     els.message.textContent = res.msg;
     els.message.className = 'message error';
@@ -757,7 +752,7 @@ function undoMove() {
   devShared = false;
   const g = game();
   if (g.moves.length === 0) return;
-  if (g.solved && mode === 'daily') return;
+  if (g.solved && mode !== 'free') return;
   g.moves.pop();
   g.solved = false;
   saveState();
@@ -769,7 +764,8 @@ function switchMode(next) {
   if (next === mode) return;
   devShared = false;
   mode = next;
-  els.tabDaily.classList.toggle('is-active', mode === 'daily');
+  els.tabEspresso.classList.toggle('is-active', mode === 'espresso');
+  els.tabLatte.classList.toggle('is-active', mode === 'latte');
   els.tabFree.classList.toggle('is-active', mode === 'free');
   els.message.textContent = '';
   els.message.className = 'message';
@@ -940,12 +936,15 @@ async function checkAuth() {
 async function syncLeaderboard() {
   if (!currentUser) return;
   try {
-    if (dailyGame.solved) {
-      await fetch('/api/leaderboard/daily', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moves: dailyGame.moves.length, hints: dailyGame.hintsUsed || 0 }),
-      });
+    for (const challenge of ['espresso', 'latte']) {
+      const g = challenge === 'espresso' ? espressoGame : latteGame;
+      if (g.solved) {
+        await fetch('/api/leaderboard/daily', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ challenge, moves: g.moves.length, hints: g.hintsUsed || 0 }),
+        });
+      }
     }
     await fetch('/api/leaderboard/unlimited', {
       method: 'POST',
@@ -996,7 +995,7 @@ async function handleLogout() {
 
 /* ---------------- leaderboard ---------------- */
 
-let leaderboardTab = 'daily';
+let leaderboardTab = 'espresso';
 let leaderboardRequest = 0;
 
 function escapeHtml(value) {
@@ -1015,15 +1014,24 @@ function closeLeaderboard() {
   if (els.leaderboardModal) els.leaderboardModal.hidden = true;
 }
 
+function openHelp() {
+  if (els.helpModal) els.helpModal.hidden = false;
+}
+
+function closeHelp() {
+  if (els.helpModal) els.helpModal.hidden = true;
+}
+
 async function loadLeaderboard(tab, force) {
   if (!force && tab === leaderboardTab) return;
   leaderboardTab = tab;
-  if (els.lbTabDaily) els.lbTabDaily.classList.toggle('is-active', tab === 'daily');
+  if (els.lbTabEspresso) els.lbTabEspresso.classList.toggle('is-active', tab === 'espresso');
+  if (els.lbTabLatte) els.lbTabLatte.classList.toggle('is-active', tab === 'latte');
   if (els.lbTabUnlimited) els.lbTabUnlimited.classList.toggle('is-active', tab === 'unlimited');
   if (els.lbList) els.lbList.innerHTML = '<p class="lb-loading">Chargement…</p>';
   const reqId = ++leaderboardRequest;
   try {
-    const url = tab === 'daily' ? '/api/leaderboard/daily' : '/api/leaderboard/unlimited';
+    const url = tab === 'unlimited' ? '/api/leaderboard/unlimited' : `/api/leaderboard/daily?challenge=${tab}`;
     const res = await fetch(url);
     const json = await res.json();
     if (reqId !== leaderboardRequest) return;
@@ -1049,7 +1057,7 @@ function renderLeaderboard(entries, tab) {
     const avatar = e.avatar
       ? `<img class="lb-avatar" src="${escapeHtml(e.avatar)}" alt="" loading="lazy">`
       : `<span class="lb-avatar lb-avatar-placeholder">${escapeHtml(name.charAt(0).toUpperCase())}</span>`;
-    const score = tab === 'daily'
+    const score = tab !== 'unlimited'
       ? `${e.moves} coup${e.moves > 1 ? 's' : ''}${e.hints ? ` · ${e.hints} conseil${e.hints > 1 ? 's' : ''}` : ''}`
       : `${e.wins} victoire${e.wins > 1 ? 's' : ''}`;
     const me = currentUser && currentUser.id === e.id ? ' lb-me' : '';
@@ -1064,8 +1072,8 @@ async function init() {
   const res = await fetch(`data.json?v=${Date.now()}`);
   data = await res.json();
   wordSet = new Set(data.words);
+  validator = createValidation(wordSet);
   wordIndex = new Map(data.words.map((w, i) => [w, i]));
-  dailyStart = data.words[data.daily[dailyIndex()]];
 
   if (data.appVersion) {
     els.footerVersion.textContent = `v${data.appVersion}`;
@@ -1090,7 +1098,8 @@ async function init() {
   els.newGame.addEventListener('click', startFree);
   els.share.addEventListener('click', copyShare);
   els.shareSolved.addEventListener('click', copyShare);
-  els.tabDaily.addEventListener('click', () => switchMode('daily'));
+  els.tabEspresso.addEventListener('click', () => switchMode('espresso'));
+  els.tabLatte.addEventListener('click', () => switchMode('latte'));
   els.tabFree.addEventListener('click', () => switchMode('free'));
   $('#theme-toggle').addEventListener('click', () => {
     const current = document.documentElement.getAttribute('data-theme') || 'light';
@@ -1134,12 +1143,18 @@ async function init() {
     if (e.key !== 'Escape') return;
     if (els.authModal && !els.authModal.hidden) closeAuthModal();
     else if (els.leaderboardModal && !els.leaderboardModal.hidden) closeLeaderboard();
+    else if (els.helpModal && !els.helpModal.hidden) closeHelp();
   });
+
+  if (els.helpBtn) els.helpBtn.addEventListener('click', openHelp);
+  if (els.helpClose) els.helpClose.addEventListener('click', closeHelp);
+  if (els.helpBackdrop) els.helpBackdrop.addEventListener('click', closeHelp);
 
   if (els.leaderboardBtn) els.leaderboardBtn.addEventListener('click', openLeaderboard);
   if (els.lbClose) els.lbClose.addEventListener('click', closeLeaderboard);
   if (els.lbBackdrop) els.lbBackdrop.addEventListener('click', closeLeaderboard);
-  if (els.lbTabDaily) els.lbTabDaily.addEventListener('click', () => loadLeaderboard('daily'));
+  if (els.lbTabEspresso) els.lbTabEspresso.addEventListener('click', () => loadLeaderboard('espresso'));
+  if (els.lbTabLatte) els.lbTabLatte.addEventListener('click', () => loadLeaderboard('latte'));
   if (els.lbTabUnlimited) els.lbTabUnlimited.addEventListener('click', () => loadLeaderboard('unlimited'));
   if (els.lbSignin) {
     els.lbSignin.addEventListener('click', () => {
