@@ -186,6 +186,17 @@ h1 {
   border-radius: 999px;
 }
 
+.tabs-group-label {
+  align-self: center;
+  padding: 0 4px 0 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .tab {
   flex: 1;
   max-width: 220px;

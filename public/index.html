@@ -65,8 +65,10 @@
     </header>
 
     <nav class="tabs" aria-label="Mode de jeu">
-      <button id="tab-daily" class="tab is-active" type="button">Quotidienne</button>
-      <button id="tab-free" class="tab" type="button">Illimitée</button>
+      <span class="tabs-group-label" aria-hidden="true">Quotidien</span>
+      <button id="tab-espresso" class="tab is-active" type="button">Espresso</button>
+      <button id="tab-latte" class="tab" type="button">Latte</button>
+      <button id="tab-free" class="tab" type="button">Illimité</button>
     </nav>
 
     <main id="app">
@@ -127,7 +129,7 @@
 
     <footer class="footer">
       <p>Lexique : liste de mots français ouverte (<a href="https://github.com/words/an-array-of-french-words" target="_blank" rel="noopener noreferrer">an-array-of-french-words</a>), normalisée sans accents.</p>
-      <p>Chaque jour, un nouveau mot pour rejoindre <strong>PAUSE</strong>.</p>
+      <p>Chaque jour, deux nouveaux défis — espresso et latte — pour rejoindre <strong>PAUSE</strong>.</p>
       <div class="footer-info">
         <span class="footer-left"><a href="https://fboucheros.com" target="_blank" rel="noopener noreferrer">By Frank</a></span>
         <span class="footer-center">c5m</span>
@@ -163,7 +165,8 @@
     <div class="modal-card">
       <h2 id="leaderboard-title">Classement</h2>
       <div class="lb-tabs">
-        <button id="lb-tab-daily" class="lb-tab is-active" type="button">Quotidienne</button>
+        <button id="lb-tab-espresso" class="lb-tab is-active" type="button">Espresso</button>
+        <button id="lb-tab-latte" class="lb-tab" type="button">Latte</button>
         <button id="lb-tab-unlimited" class="lb-tab" type="button">Illimitée</button>
       </div>
       <p id="lb-guest-prompt" class="lb-prompt" hidden>

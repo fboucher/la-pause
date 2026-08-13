@@ -8,6 +8,9 @@ const SRC = path.join(__dirname, 'lexicon.json');
 const OUT = path.join(__dirname, '..', 'public', 'data.json');
 const TARGET = 'pause';
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz';
+const LATTE_MIN_PAR = 2;
+const LATTE_MAX_PAR = 4;
+const ESPRESSO_MIN_PAR = 5;
 
 function normalize(word) {
   return word.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -54,21 +57,45 @@ function bfs(graph, target) {
   return dist;
 }
 
-function main() {
-  const words = loadWords();
+function buildPayload(words, appVersion = '1.0.0', generatedAt = new Date().toISOString()) {
   const graph = buildGraph(words);
   const dist = bfs(graph, TARGET);
 
   const connected = [...dist.keys()].sort();
   const distList = connected.map((w) => dist.get(w));
-  const daily = connected
+  const dailyEspresso = connected
     .map((w, i) => ({ i, d: dist.get(w) }))
-    .filter((x) => x.d >= 4 && x.d <= 8)
+    .filter((x) => x.d >= ESPRESSO_MIN_PAR)
+    .map((x) => x.i);
+  const dailyLatte = connected
+    .map((w, i) => ({ i, d: dist.get(w) }))
+    .filter((x) => x.d >= LATTE_MIN_PAR && x.d <= LATTE_MAX_PAR)
     .map((x) => x.i);
 
   const hist = {};
   for (const d of dist.values()) hist[d] = (hist[d] || 0) + 1;
 
+  const payload = {
+    version: 2,
+    appVersion,
+    target: TARGET,
+    generatedAt,
+    stats: {
+      total: words.size,
+      connected: connected.length,
+      espressoPool: dailyEspresso.length,
+      lattePool: dailyLatte.length,
+      distribution: hist,
+    },
+    words: connected,
+    dist: distList,
+    dailyEspresso,
+    dailyLatte,
+  };
+  return payload;
+}
+
+function currentVersion() {
   let appVersion = '1.0.0';
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
@@ -76,28 +103,23 @@ function main() {
   } catch (err) {
     // fallback
   }
+  return appVersion;
+}
 
-  const payload = {
-    version: 1,
-    appVersion,
-    target: TARGET,
-    generatedAt: new Date().toISOString(),
-    stats: {
-      total: words.size,
-      connected: connected.length,
-      dailyPool: daily.length,
-      distribution: hist,
-    },
-    words: connected,
-    dist: distList,
-    daily,
-  };
+function main() {
+  const words = loadWords();
+  const payload = buildPayload(words, currentVersion());
 
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(payload));
   console.log(`wrote ${OUT}`);
-  console.log(`  ${connected.length}/${words.size} words connected to "${TARGET}"`);
-  console.log(`  daily pool (par 4-8): ${daily.length}`);
+  console.log(`  ${payload.stats.connected}/${words.size} words connected to "${TARGET}"`);
+  console.log(`  espresso pool (par >= ${ESPRESSO_MIN_PAR}): ${payload.stats.espressoPool}`);
+  console.log(`  latte pool (par ${LATTE_MIN_PAR}-${LATTE_MAX_PAR}): ${payload.stats.lattePool}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { buildPayload, loadWords, normalize };

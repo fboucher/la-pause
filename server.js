@@ -7,7 +7,7 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GitHubStrategy = require('passport-github2').Strategy;
-const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard } = require('./db');
+const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin, isDailyChallenge, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard } = require('./db');
 
 function loadEnv() {
   const envPath = path.join(__dirname, '.env');
@@ -273,7 +273,7 @@ function createApp(db, options = {}) {
 
   app.post('/api/analytics/win', (req, res) => {
     const { mode } = req.body || {};
-    if (mode !== 'daily' && mode !== 'free') {
+    if (mode !== 'espresso' && mode !== 'latte' && mode !== 'free') {
       return res.status(400).json({ error: 'Invalid mode.' });
     }
     const date = todayInToronto(now());
@@ -285,21 +285,29 @@ function createApp(db, options = {}) {
     if (!req.isAuthenticated || !req.isAuthenticated()) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    const { moves, hints } = req.body || {};
+    const { challenge, moves, hints } = req.body || {};
+    if (!isDailyChallenge(challenge)) {
+      return res.status(400).json({ error: 'Invalid challenge.' });
+    }
     const m = Number.parseInt(moves, 10);
     const h = Number.parseInt(hints, 10);
     if (!Number.isInteger(m) || m < 1 || !Number.isInteger(h) || h < 0) {
       return res.status(400).json({ error: 'Invalid score.' });
     }
     const date = todayInToronto(now());
-    const result = submitDailyScore(db, date, req.user.id, m, h, now().toISOString());
-    res.json({ ok: true, date, ...result });
+    const result = submitDailyScore(db, date, challenge, req.user.id, m, h, now().toISOString());
+    res.json({ ok: true, date, challenge, ...result });
   });
 
   app.get('/api/leaderboard/daily', (req, res) => {
+    const rawChallenge = req.query.challenge;
+    const challenge = typeof rawChallenge === 'string' && rawChallenge !== '' ? rawChallenge : 'espresso';
+    if (!isDailyChallenge(challenge)) {
+      return res.status(400).json({ error: 'Invalid challenge.' });
+    }
     const raw = req.query.date;
     const date = typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayInToronto(now());
-    res.json({ date, entries: getDailyLeaderboard(db, date) });
+    res.json({ date, challenge, entries: getDailyLeaderboard(db, date, challenge) });
   });
 
   app.post('/api/leaderboard/unlimited', (req, res) => {

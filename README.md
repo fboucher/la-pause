@@ -15,16 +15,17 @@ Objectif : rejoindre **PAUSE**.
 
 ## Modes
 
-- **Quotidienne** : un mot par jour, identique pour tous les joueurs (calculé
-  de façon déterministe depuis la date à minuit Montréal, sans serveur). La
-  grille se verrouille une fois résolue.
+- **Quotidien** : deux défis par jour, identiques pour tous les joueurs,
+  calculés de façon déterministe depuis la date à minuit Montréal, sans
+  serveur. **Espresso** (difficile, par ≥ 5) et **latte** (facile, par 2–4).
+  Chaque grille se verrouille une fois résolue.
 - **Illimitée** : un mot de départ aléatoire, résolvable à volonté.
 
 ## Statistiques (localStorage)
 
-Reprise de la partie quotidienne en cours au rechargement, série de victoires
+Reprise des défis quotidiens en cours au rechargement, série de victoires
 consécutives, taux de réussite et répartition des coups. Partage sans spoiler :
-`« La pause n°X — 6 coups (par 5) »`.
+`« La pause espresso n°X — 6 coups (par 5) »`.
 
 ## Déploiement
 
