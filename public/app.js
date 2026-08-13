@@ -96,6 +96,10 @@ const els = {
   lbSignin: $('#lb-signin'),
   lbClose: $('#lb-close'),
   lbBackdrop: $('#leaderboard-modal .modal-backdrop'),
+  helpBtn: $('#help-btn'),
+  helpModal: $('#help-modal'),
+  helpClose: $('#help-close'),
+  helpBackdrop: $('#help-modal .modal-backdrop'),
 };
 
 function game() {
@@ -1010,6 +1014,14 @@ function closeLeaderboard() {
   if (els.leaderboardModal) els.leaderboardModal.hidden = true;
 }
 
+function openHelp() {
+  if (els.helpModal) els.helpModal.hidden = false;
+}
+
+function closeHelp() {
+  if (els.helpModal) els.helpModal.hidden = true;
+}
+
 async function loadLeaderboard(tab, force) {
   if (!force && tab === leaderboardTab) return;
   leaderboardTab = tab;
@@ -1131,7 +1143,12 @@ async function init() {
     if (e.key !== 'Escape') return;
     if (els.authModal && !els.authModal.hidden) closeAuthModal();
     else if (els.leaderboardModal && !els.leaderboardModal.hidden) closeLeaderboard();
+    else if (els.helpModal && !els.helpModal.hidden) closeHelp();
   });
+
+  if (els.helpBtn) els.helpBtn.addEventListener('click', openHelp);
+  if (els.helpClose) els.helpClose.addEventListener('click', closeHelp);
+  if (els.helpBackdrop) els.helpBackdrop.addEventListener('click', closeHelp);
 
   if (els.leaderboardBtn) els.leaderboardBtn.addEventListener('click', openLeaderboard);
   if (els.lbClose) els.lbClose.addEventListener('click', closeLeaderboard);

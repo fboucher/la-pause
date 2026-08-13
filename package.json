@@ -1,7 +1,7 @@
 {
   "name": "la-pause",
-  "version": "1.2.1",
-  "description": "Une échelle de mots française, sur le thème de la pause café.",
+  "version": "1.2.2",
+  "description": "Une échelle de mots en français rejoignant le mot pause, une lettre à la fois.",
   "private": true,
   "author": "Frank Boucher",
   "scripts": {
