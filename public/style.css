@@ -949,6 +949,20 @@ h1 {
   color: var(--coffee);
 }
 
+.help-rules ol {
+  margin: 0;
+  padding: 0 0 0 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.help-rules li {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--espresso);
+}
+
 .auth-providers {
   display: flex;
   flex-direction: column;
