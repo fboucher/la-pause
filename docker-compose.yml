@@ -9,6 +9,9 @@ services:
       - lapause-data:/app/data
     env_file:
       - .env
+    environment:
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM=${RESEND_FROM:-onboarding@resend.dev}
     restart: unless-stopped
 
 volumes:

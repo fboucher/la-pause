@@ -56,7 +56,6 @@ const els = {
   footerVersion: $('#footer-version'),
   devBadge: $('#dev-badge'),
   message: $('#message'),
-  undo: $('#undo'),
   hintPosition: $('#hint-position'),
   hintWord: $('#hint-word'),
   tokenCount: $('#token-count'),
@@ -100,6 +99,21 @@ const els = {
   helpModal: $('#help-modal'),
   helpClose: $('#help-close'),
   helpBackdrop: $('#help-modal .modal-backdrop'),
+  magicForm: $('#magic-link-form'),
+  magicEmail: $('#magic-email'),
+  magicBtn: $('#magic-btn'),
+  hintDefinition: $('#hint-definition'),
+  definitionModal: $('#definition-modal'),
+  definitionText: $('#definition-text'),
+  definitionClose: $('#definition-close'),
+  definitionBackdrop: $('#definition-modal .modal-backdrop'),
+  yesterdaySolBtn: $('#yesterday-sol-btn'),
+  yesterdaySolModal: $('#yesterday-sol-modal'),
+  yesterdayTabEspresso: $('#yesterday-tab-espresso'),
+  yesterdayTabLatte: $('#yesterday-tab-latte'),
+  yesterdaySolImg: $('#yesterday-sol-img'),
+  yesterdaySolClose: $('#yesterday-sol-close'),
+  yesterdaySolBackdrop: $('#yesterday-sol-modal .modal-backdrop'),
 };
 
 function game() {
@@ -580,8 +594,6 @@ function renderMeta() {
 
 function renderControls() {
   const solved = isSolved();
-  const locked = solved && mode !== 'free';
-  els.undo.disabled = steps(game()) === 0 || locked;
   els.newGame.style.display = mode === 'free' ? '' : 'none';
   els.share.style.display = solved ? '' : 'none';
   els.submit.disabled = solved;
@@ -593,6 +605,12 @@ function renderControls() {
     els.hintPosition.style.display = '';
     els.hintPosition.disabled = solved;
     els.hintPosition.title = solved ? "Partie terminée !" : "Révèle quelle lettre changer (Gratuit en dev)";
+
+    if (els.hintDefinition) {
+      els.hintDefinition.style.display = '';
+      els.hintDefinition.disabled = solved;
+      els.hintDefinition.title = solved ? "Partie terminée !" : "Donne la définition du mot suivant (Gratuit en dev)";
+    }
 
     els.hintWord.style.display = '';
     els.hintWord.disabled = solved;
@@ -606,6 +624,16 @@ function renderControls() {
       : (hasFreeHint ? "1 conseil gratuit ! Révèle quelle lettre changer" : (tokens < 1 ? "Coûte 1 🪙 (Solde insuffisant)" : "Révèle quelle lettre changer (coûte 1 🪙)"));
     const positionPrice = $('#hint-position-price');
     if (positionPrice) positionPrice.textContent = hasFreeHint ? '(1 gratuit 🎁)' : '(1 🪙)';
+
+    if (els.hintDefinition) {
+      els.hintDefinition.style.display = '';
+      els.hintDefinition.disabled = solved || (tokens < 1 && !hasFreeHint);
+      els.hintDefinition.title = solved
+        ? "Partie terminée !"
+        : (hasFreeHint ? "1 conseil gratuit ! Donne la définition du mot suivant" : (tokens < 1 ? "Coûte 1 🪙 (Solde insuffisant)" : "Donne la définition du mot suivant (coûte 1 🪙)"));
+      const definitionPrice = $('#hint-definition-price');
+      if (definitionPrice) definitionPrice.textContent = hasFreeHint ? '(1 gratuit 🎁)' : '(1 🪙)';
+    }
 
     els.hintWord.style.display = '';
     els.hintWord.disabled = solved || tokens < 2;
@@ -748,18 +776,6 @@ function submitGuess(ev) {
   if (res.word === data.target) handleWin();
 }
 
-function undoMove() {
-  devShared = false;
-  const g = game();
-  if (g.moves.length === 0) return;
-  if (g.solved && mode !== 'free') return;
-  g.moves.pop();
-  g.solved = false;
-  saveState();
-  renderAll();
-  els.input.focus();
-}
-
 function switchMode(next) {
   if (next === mode) return;
   devShared = false;
@@ -847,6 +863,69 @@ function usePositionHint() {
   } else {
     flashMessage(`Conseil : changez la lettre n°${pos}.`, 'ok');
   }
+}
+
+async function useDefinitionHint() {
+  if (isSolved()) return;
+  const word = hintWord();
+  if (word == null) {
+    flashMessage('Aucun conseil disponible ici.', 'error');
+    return;
+  }
+
+  let usingFreeHint = false;
+  if (!isDev) {
+    if (mode === 'free' && !freeGame.freeHintUsed) {
+      usingFreeHint = true;
+    } else if (tokens < 1) {
+      flashMessage('Jetons insuffisants.', 'error');
+      return;
+    } else {
+      tokens -= 1;
+      saveTokens();
+    }
+  }
+
+  if (els.hintDefinition) els.hintDefinition.disabled = true;
+
+  try {
+    const res = await fetch(`/api/definition?word=${encodeURIComponent(word)}`);
+    if (!res.ok) {
+      throw new Error('Fetch failed');
+    }
+    const resData = await res.json();
+    const definition = resData.definition;
+    if (!definition) {
+      throw new Error('No definition');
+    }
+
+    if (!isDev) {
+      game().hintsUsed = (game().hintsUsed || 0) + 1;
+      if (usingFreeHint) {
+        game().freeHintUsed = true;
+      }
+    }
+    saveState();
+    renderAll();
+    openDefinitionModal(definition);
+  } catch (err) {
+    flashMessage('Impossible de charger la définition. Veuillez vérifier votre connexion.', 'error');
+    if (!isDev && !usingFreeHint) {
+      tokens += 1;
+      saveTokens();
+    }
+  } finally {
+    if (els.hintDefinition) els.hintDefinition.disabled = false;
+  }
+}
+
+function openDefinitionModal(definition) {
+  if (els.definitionText) els.definitionText.textContent = definition;
+  if (els.definitionModal) els.definitionModal.hidden = false;
+}
+
+function closeDefinitionModal() {
+  if (els.definitionModal) els.definitionModal.hidden = true;
 }
 
 function useNextWordHint() {
@@ -1022,6 +1101,161 @@ function closeHelp() {
   if (els.helpModal) els.helpModal.hidden = true;
 }
 
+/* ---------------- yesterday solution ---------------- */
+
+let yesterdayTab = 'espresso';
+
+function yesterdayStart(challenge) {
+  const pool = challenge === 'latte' ? data.dailyLatte : data.dailyEspresso;
+  return data.words[pool[fnv1a(`${yesterdayStr()}:${challenge}`) % pool.length]];
+}
+
+function getSolutionPath(startWord) {
+  const path = [startWord];
+  let curr = startWord;
+  while (curr !== data.target) {
+    let nextWord = null;
+    const d = parOf(curr);
+    if (d === null) break;
+    for (let i = 0; i < curr.length; i++) {
+      for (let c = 97; c < 123; c++) {
+        const ch = String.fromCharCode(c);
+        if (ch === curr[i]) continue;
+        const cand = curr.slice(0, i) + ch + curr.slice(i + 1);
+        if (wordSet.has(cand) && parOf(cand) === d - 1) {
+          nextWord = cand;
+          break;
+        }
+      }
+      if (nextWord) break;
+    }
+    if (!nextWord) break;
+    path.push(nextWord);
+    curr = nextWord;
+  }
+  return path;
+}
+
+function generateSolutionImage(words, challenge, puzzleNum) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  const cellW = 40;
+  const cellH = 46;
+  const gap = 6;
+  const padding = 24;
+  const headerH = 75;
+  const footerH = 34;
+  const stepsCount = words.length;
+  
+  const contentW = 5 * cellW + 4 * gap;
+  const contentH = stepsCount * cellH + (stepsCount - 1) * gap;
+  
+  canvas.width = contentW + 2 * padding;
+  canvas.height = contentH + 2 * padding + headerH + footerH;
+  
+  // Background
+  ctx.fillStyle = '#F7F1E4';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw Header
+  const label = `Solution ${challenge} n°${puzzleNum}`;
+  const par = parOf(words[0]);
+  const stepsCountLabel = stepsCount - 1;
+  const scoreText = `rejoint PAUSE en ${stepsCountLabel} coup${stepsCountLabel > 1 ? 's' : ''} (par ${par})`;
+  
+  ctx.textAlign = 'center';
+  
+  // 1. Draw Title
+  ctx.fillStyle = '#33241B';
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(label, canvas.width / 2, padding + 18);
+  
+  // 2. Draw Subtitle / Score
+  ctx.fillStyle = '#9B8A78';
+  ctx.font = '500 12px sans-serif';
+  ctx.fillText(scoreText, canvas.width / 2, padding + 40);
+  
+  // Draw Grid
+  for (let r = 0; r < stepsCount; r++) {
+    const word = words[r];
+    const y = padding + headerH + r * (cellH + gap);
+    
+    for (let c = 0; c < 5; c++) {
+      const x = padding + c * (cellW + gap);
+      const radius = 8;
+      
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, cellW, cellH, radius);
+      } else {
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + cellW, y, x + cellW, y + cellH, radius);
+        ctx.arcTo(x + cellW, y + cellH, x, y + cellH, radius);
+        ctx.arcTo(x, y + cellH, x, y, radius);
+        ctx.arcTo(x, y, x + cellW, y, radius);
+      }
+      ctx.closePath();
+      
+      const isCorrect = r > 0 && word[c] === data.target[c];
+      
+      if (isCorrect) {
+        ctx.fillStyle = '#6F4E37';
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#FDFAF2';
+        ctx.fill();
+        ctx.strokeStyle = '#E7DCC8';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      
+      ctx.fillStyle = isCorrect ? '#FDFAF2' : '#33241B';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(word[c].toUpperCase(), x + cellW / 2, y + cellH / 2 + 1);
+    }
+  }
+  
+  // Draw Footer
+  const footerY = padding + headerH + contentH + 22;
+  ctx.fillStyle = '#9B8A78';
+  ctx.font = '600 13px sans-serif';
+  ctx.fillText('c5m.ca/pause', canvas.width / 2, footerY);
+  
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
+
+async function openYesterdaySolution(challenge = 'espresso') {
+  yesterdayTab = challenge;
+  if (els.yesterdaySolModal) els.yesterdaySolModal.hidden = false;
+  
+  if (els.yesterdayTabEspresso) els.yesterdayTabEspresso.classList.toggle('is-active', challenge === 'espresso');
+  if (els.yesterdayTabLatte) els.yesterdayTabLatte.classList.toggle('is-active', challenge === 'latte');
+
+  const startWord = yesterdayStart(challenge);
+  const path = getSolutionPath(startWord);
+  const puzzleNum = puzzleNumber() - 1;
+
+  try {
+    const blob = await generateSolutionImage(path, challenge, puzzleNum);
+    const url = URL.createObjectURL(blob);
+    if (els.yesterdaySolImg) {
+      els.yesterdaySolImg.onload = () => URL.revokeObjectURL(url);
+      els.yesterdaySolImg.src = url;
+    }
+  } catch (err) {
+    console.error('Failed to generate yesterday solution image:', err);
+  }
+}
+
+function closeYesterdaySolution() {
+  if (els.yesterdaySolModal) els.yesterdaySolModal.hidden = true;
+}
+
 async function loadLeaderboard(tab, force) {
   if (!force && tab === leaderboardTab) return;
   leaderboardTab = tab;
@@ -1092,8 +1326,8 @@ async function init() {
   checkAuth();
 
   els.form.addEventListener('submit', submitGuess);
-  els.undo.addEventListener('click', undoMove);
   els.hintPosition.addEventListener('click', usePositionHint);
+  if (els.hintDefinition) els.hintDefinition.addEventListener('click', useDefinitionHint);
   els.hintWord.addEventListener('click', useNextWordHint);
   els.newGame.addEventListener('click', startFree);
   els.share.addEventListener('click', copyShare);
@@ -1123,6 +1357,40 @@ async function init() {
   if (els.mockBtn) {
     els.mockBtn.addEventListener('click', () => { window.location.href = '/auth/mock'; });
   }
+  if (els.magicForm) {
+    els.magicForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = els.magicEmail.value;
+      if (!email) return;
+
+      if (els.magicBtn) {
+        els.magicBtn.disabled = true;
+        els.magicBtn.textContent = 'Envoi...';
+      }
+
+      try {
+        const res = await fetch('/auth/magic-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          flashMessage(data.message || 'Lien de connexion envoyé !', 'ok');
+          closeAuthModal();
+        } else {
+          flashMessage(data.error || 'Erreur lors de l\'envoi.', 'error');
+        }
+      } catch (err) {
+        flashMessage('Erreur de connexion.', 'error');
+      } finally {
+        if (els.magicBtn) {
+          els.magicBtn.disabled = false;
+          els.magicBtn.textContent = 'Continuer avec email';
+        }
+      }
+    });
+  }
   if (els.userBadge) {
     els.userBadge.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1144,11 +1412,34 @@ async function init() {
     if (els.authModal && !els.authModal.hidden) closeAuthModal();
     else if (els.leaderboardModal && !els.leaderboardModal.hidden) closeLeaderboard();
     else if (els.helpModal && !els.helpModal.hidden) closeHelp();
+    else if (els.definitionModal && !els.definitionModal.hidden) closeDefinitionModal();
+    else if (els.yesterdaySolModal && !els.yesterdaySolModal.hidden) closeYesterdaySolution();
   });
 
   if (els.helpBtn) els.helpBtn.addEventListener('click', openHelp);
   if (els.helpClose) els.helpClose.addEventListener('click', closeHelp);
   if (els.helpBackdrop) els.helpBackdrop.addEventListener('click', closeHelp);
+
+  if (els.definitionClose) els.definitionClose.addEventListener('click', closeDefinitionModal);
+  if (els.definitionBackdrop) els.definitionBackdrop.addEventListener('click', closeDefinitionModal);
+
+  if (els.yesterdaySolBtn) {
+    els.yesterdaySolBtn.addEventListener('click', () => {
+      openYesterdaySolution(mode === 'latte' ? 'latte' : 'espresso');
+    });
+  }
+  if (els.yesterdayTabEspresso) {
+    els.yesterdayTabEspresso.addEventListener('click', () => openYesterdaySolution('espresso'));
+  }
+  if (els.yesterdayTabLatte) {
+    els.yesterdayTabLatte.addEventListener('click', () => openYesterdaySolution('latte'));
+  }
+  if (els.yesterdaySolClose) {
+    els.yesterdaySolClose.addEventListener('click', closeYesterdaySolution);
+  }
+  if (els.yesterdaySolBackdrop) {
+    els.yesterdaySolBackdrop.addEventListener('click', closeYesterdaySolution);
+  }
 
   if (els.leaderboardBtn) els.leaderboardBtn.addEventListener('click', openLeaderboard);
   if (els.lbClose) els.lbClose.addEventListener('click', closeLeaderboard);

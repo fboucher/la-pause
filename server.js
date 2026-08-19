@@ -7,7 +7,9 @@ const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GitHubStrategy = require('passport-github2').Strategy;
-const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin, isDailyChallenge, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard } = require('./db');
+const crypto = require('crypto');
+const { Resend } = require('resend');
+const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin, isDailyChallenge, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard, saveMagicLinkToken, getMagicLinkToken, deleteMagicLinkToken } = require('./db');
 
 function loadEnv() {
   const envPath = path.join(__dirname, '.env');
@@ -167,6 +169,102 @@ function createApp(db, options = {}) {
     })(req, res, next);
   });
 
+  app.post('/auth/magic-link', async (req, res, next) => {
+    const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Adresse e-mail invalide.' });
+    }
+
+    try {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      saveMagicLinkToken(db, email, token, expiresAt);
+
+      const host = req.get('host');
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const magicLink = `${protocol}://${host}/auth/magic-link/callback?token=${token}&email=${encodeURIComponent(email)}`;
+
+      const resendApiKey = process.env.RESEND_API_KEY;
+      const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
+
+      if (resendApiKey) {
+        const resend = new Resend(resendApiKey);
+
+        try {
+          const { data, error } = await resend.emails.send({
+            from: resendFrom,
+            to: email,
+            subject: 'La pause — Votre lien de connexion',
+            text: `Bonjour,\n\nCliquez sur ce lien pour vous connecter à La pause :\n${magicLink}\n\nCe lien expirera dans 15 minutes.`,
+            html: `<p>Bonjour,</p><p>Cliquez sur le lien ci-dessous pour vous connecter à <strong>La pause</strong> :</p><p><a href="${magicLink}">${magicLink}</a></p><p>Ce lien expirera dans 15 minutes.</p>`,
+          });
+
+          if (error) {
+            console.error('Failed to send magic-link email via Resend:', error);
+            console.log(`[MAGIC LINK DEV FALLBACK]: ${magicLink}`);
+            return res.json({ success: true, message: 'Un e-mail de connexion a été envoyé (fallback local console).' });
+          }
+
+          res.json({ success: true, message: 'Un e-mail de connexion a été envoyé.' });
+        } catch (sendErr) {
+          console.error('Resend throw error:', sendErr);
+          console.log(`[MAGIC LINK DEV FALLBACK]: ${magicLink}`);
+          res.json({ success: true, message: 'Un e-mail de connexion a été envoyé (fallback local console).' });
+        }
+      } else {
+        console.log(`[MAGIC LINK DEV FALLBACK]: ${magicLink}`);
+        res.json({ success: true, message: 'Un e-mail de connexion a été envoyé (fallback local console).' });
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.get('/auth/magic-link/callback', (req, res, next) => {
+    const { token, email } = req.query;
+    if (!token || !email) {
+      return res.redirect('/?auth=failed');
+    }
+
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const tokenRecord = getMagicLinkToken(db, token);
+
+      if (!tokenRecord) {
+        return res.redirect('/?auth=failed');
+      }
+
+      if (tokenRecord.email.toLowerCase() !== normalizedEmail) {
+        return res.redirect('/?auth=failed');
+      }
+
+      if (new Date(tokenRecord.expires_at) < new Date()) {
+        deleteMagicLinkToken(db, token);
+        return res.redirect('/?auth=failed');
+      }
+
+      deleteMagicLinkToken(db, token);
+
+      const emailParts = normalizedEmail.split('@');
+      const defaultName = emailParts[0].charAt(0).toUpperCase() + emailParts[0].slice(1);
+
+      const user = upsertUser(db, {
+        provider: 'magic-link',
+        providerId: normalizedEmail,
+        name: defaultName,
+        email: normalizedEmail,
+        avatar: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%239B8A78"/><text x="50" y="60" font-size="30" text-anchor="middle" fill="white">${defaultName.charAt(0).toUpperCase()}</text></svg>`
+      });
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        res.redirect('/');
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.get('/auth/mock', (req, res, next) => {
     if (process.env.NODE_ENV === 'production' && process.env.ALLOW_MOCK_AUTH !== 'true') {
       return res.status(403).json({ error: 'Mock auth not allowed in production.' });
@@ -195,6 +293,65 @@ function createApp(db, options = {}) {
       return res.json({ authenticated: true, user: req.user });
     }
     res.json({ authenticated: false });
+  });
+
+  app.get('/api/definition', async (req, res) => {
+    const word = req.query.word;
+    if (!word || typeof word !== 'string' || !/^[a-zA-Zà-ÿÀ-Ÿ-]+$/.test(word)) {
+      return res.status(400).json({ error: 'Mot invalide.' });
+    }
+
+    const normalizedWord = encodeURIComponent(word.trim().toLowerCase());
+    const url = `https://www.larousse.fr/dictionnaires/francais/${normalizedWord}`;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+        }
+      });
+
+      if (!response.ok) {
+        return res.status(404).json({ error: 'Définition introuvable.' });
+      }
+
+      const html = await response.text();
+
+      const liMatch = html.match(/<li[^>]*class="DivisionDefinition"[^>]*>([\s\S]*?)<\/li>/);
+      let rawText = null;
+      if (liMatch) {
+        rawText = liMatch[1];
+      } else {
+        const pMatch = html.match(/<p[^>]*class="Definition"[^>]*>([\s\S]*?)<\/p>/);
+        if (pMatch) {
+          rawText = pMatch[1];
+        }
+      }
+
+      if (!rawText) {
+        return res.status(404).json({ error: 'Définition introuvable.' });
+      }
+
+      let text = rawText;
+      const colonIndex = text.search(/(\s*:\s*|&nbsp;:|&#160;:|&nbsp;\s*:)/);
+      if (colonIndex !== -1) {
+        text = text.substring(0, colonIndex);
+      }
+      text = text.replace(/<[^>]*>/g, '');
+      text = text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#160;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+
+      res.json({ definition: text.trim() });
+    } catch (error) {
+      console.error(`Error scraping Larousse for word "${word}":`, error);
+      res.status(500).json({ error: 'Erreur lors de la récupération de la définition.' });
+    }
   });
 
   app.get('/api/user/profile', (req, res) => {
