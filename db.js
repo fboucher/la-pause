@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS leaderboard_free (
   wins INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS magic_link_tokens (
+  email TEXT NOT NULL,
+  token TEXT NOT NULL PRIMARY KEY,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 function migrate(db) {
@@ -252,6 +259,24 @@ function getFreeLeaderboard(db) {
     .all();
 }
 
+function saveMagicLinkToken(db, email, token, expiresAt) {
+  db.prepare(
+    `INSERT INTO magic_link_tokens (email, token, expires_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(token) DO UPDATE SET email = excluded.email, expires_at = excluded.expires_at`
+  ).run(email, token, expiresAt);
+}
+
+function getMagicLinkToken(db, token) {
+  return db
+    .prepare('SELECT email, token, expires_at, created_at FROM magic_link_tokens WHERE token = ?')
+    .get(token);
+}
+
+function deleteMagicLinkToken(db, token) {
+  db.prepare('DELETE FROM magic_link_tokens WHERE token = ?').run(token);
+}
+
 module.exports = {
   openDatabase,
   todayInToronto,
@@ -268,5 +293,8 @@ module.exports = {
   getDailyLeaderboard,
   submitFreeWin,
   getFreeLeaderboard,
+  saveMagicLinkToken,
+  getMagicLinkToken,
+  deleteMagicLinkToken,
 };
 

@@ -1,6 +1,6 @@
 {
   "name": "la-pause",
-  "version": "1.2.2",
+  "version": "1.2.4",
   "description": "Une échelle de mots en français rejoignant le mot pause, une lettre à la fois.",
   "private": true,
   "author": "Frank Boucher",
@@ -12,6 +12,7 @@
   "dependencies": {
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "nodemailer": "^9.0.5",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0"
