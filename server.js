@@ -8,7 +8,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GitHubStrategy = require('passport-github2').Strategy;
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const { openDatabase, todayInToronto, recordGuestVisit, findUserById, upsertUser, getPlayerStats, syncPlayerStats, recordRegisteredVisit, recordWin, isDailyChallenge, submitDailyScore, getDailyLeaderboard, submitFreeWin, getFreeLeaderboard, saveMagicLinkToken, getMagicLinkToken, deleteMagicLinkToken } = require('./db');
 
 function loadEnv() {
@@ -169,7 +169,7 @@ function createApp(db, options = {}) {
     })(req, res, next);
   });
 
-  app.post('/auth/magic-link', (req, res, next) => {
+  app.post('/auth/magic-link', async (req, res, next) => {
     const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
     if (!email || !email.includes('@')) {
       return res.status(400).json({ error: 'Adresse e-mail invalide.' });
@@ -184,39 +184,33 @@ function createApp(db, options = {}) {
       const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       const magicLink = `${protocol}://${host}/auth/magic-link/callback?token=${token}&email=${encodeURIComponent(email)}`;
 
-      const smtpHost = process.env.SMTP_HOST;
-      const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
-      const smtpUser = process.env.SMTP_USER;
-      const smtpPass = process.env.SMTP_PASS;
-      const smtpFrom = process.env.SMTP_FROM || 'no-reply@c5m.ca';
+      const resendApiKey = process.env.RESEND_API_KEY;
+      const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
 
-      if (smtpHost && smtpUser && smtpPass) {
-        const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-        });
+      if (resendApiKey) {
+        const resend = new Resend(resendApiKey);
 
-        const mailOptions = {
-          from: smtpFrom,
-          to: email,
-          subject: 'La pause — Votre lien de connexion',
-          text: `Bonjour,\n\nCliquez sur ce lien pour vous connecter à La pause :\n${magicLink}\n\nCe lien expirera dans 15 minutes.`,
-          html: `<p>Bonjour,</p><p>Cliquez sur le lien ci-dessous pour vous connecter à <strong>La pause</strong> :</p><p><a href="${magicLink}">${magicLink}</a></p><p>Ce lien expirera dans 15 minutes.</p>`,
-        };
+        try {
+          const { data, error } = await resend.emails.send({
+            from: resendFrom,
+            to: email,
+            subject: 'La pause — Votre lien de connexion',
+            text: `Bonjour,\n\nCliquez sur ce lien pour vous connecter à La pause :\n${magicLink}\n\nCe lien expirera dans 15 minutes.`,
+            html: `<p>Bonjour,</p><p>Cliquez sur le lien ci-dessous pour vous connecter à <strong>La pause</strong> :</p><p><a href="${magicLink}">${magicLink}</a></p><p>Ce lien expirera dans 15 minutes.</p>`,
+          });
 
-        transporter.sendMail(mailOptions, (error, info) => {
           if (error) {
-            console.error('Failed to send magic-link email:', error);
+            console.error('Failed to send magic-link email via Resend:', error);
             console.log(`[MAGIC LINK DEV FALLBACK]: ${magicLink}`);
             return res.json({ success: true, message: 'Un e-mail de connexion a été envoyé (fallback local console).' });
           }
+
           res.json({ success: true, message: 'Un e-mail de connexion a été envoyé.' });
-        });
+        } catch (sendErr) {
+          console.error('Resend throw error:', sendErr);
+          console.log(`[MAGIC LINK DEV FALLBACK]: ${magicLink}`);
+          res.json({ success: true, message: 'Un e-mail de connexion a été envoyé (fallback local console).' });
+        }
       } else {
         console.log(`[MAGIC LINK DEV FALLBACK]: ${magicLink}`);
         res.json({ success: true, message: 'Un e-mail de connexion a été envoyé (fallback local console).' });
