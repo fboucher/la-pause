@@ -94,10 +94,13 @@
         <p id="message" class="message" role="status" aria-live="assertive"></p>
 
         <div id="controls" class="controls">
-          <button id="undo" class="btn" type="button">Annuler</button>
           <button id="hint-position" class="btn" type="button">
             <span>Position</span>
             <span class="price" id="hint-position-price">(1 🪙)</span>
+          </button>
+          <button id="hint-definition" class="btn" type="button">
+            <span>Définition</span>
+            <span class="price" id="hint-definition-price">(1 🪙)</span>
           </button>
           <button id="hint-word" class="btn" type="button">
             <span>Mot suivant</span>
@@ -129,15 +132,17 @@
           <div><dt>Réussite</dt><dd id="stat-rate">0 %</dd></div>
         </dl>
         <div id="dist-bars" class="dist-bars" aria-label="Répartition des coups"></div>
+        <div class="stats-actions" style="margin-top: 16px; text-align: center;">
+          <button id="yesterday-sol-btn" class="btn" type="button" style="width: 100%;">Solution d'hier</button>
+        </div>
       </section>
     </main>
 
     <footer class="footer">
-      <p>Lexique : liste de mots français ouverte (<a href="https://github.com/words/an-array-of-french-words" target="_blank" rel="noopener noreferrer">an-array-of-french-words</a>), normalisée sans accents.</p>
       <p>Chaque jour, deux nouveaux défis — espresso et latte — pour rejoindre <strong>PAUSE</strong>.</p>
       <div class="footer-info">
-        <span class="footer-left"><a href="https://fboucheros.com" target="_blank" rel="noopener noreferrer">By Frank</a></span>
-        <span class="footer-center">c5m</span>
+        <span class="footer-left"><a href="https://fboucheros.com" target="_blank" rel="noopener noreferrer">Frank Boucher</a></span>
+        <span class="footer-center"><a href="https://cloud5mins.com/" target="_blank" rel="noopener noreferrer">Cloud5mins</a></span>
         <span id="footer-version" class="footer-right">v1.1.0</span>
       </div>
     </footer>
@@ -160,6 +165,11 @@
         <button id="mock-btn" class="btn btn-provider" type="button" style="background: var(--latte); border-color: var(--coffee); margin-top: 8px; color: var(--espresso);" hidden>
           <span>☕ Mode Développeur (Mock Login)</span>
         </button>
+        <div class="auth-divider">ou</div>
+        <form id="magic-link-form" class="magic-link-form">
+          <input id="magic-email" class="auth-input" type="email" placeholder="votre.email@exemple.com" required>
+          <button id="magic-btn" class="btn btn-primary" type="submit" style="width: 100%; margin-top: 8px;">Continuer avec email</button>
+        </form>
       </div>
       <button id="modal-close" class="btn btn-secondary" type="button">Fermer</button>
     </div>
@@ -193,7 +203,7 @@
         <p><strong>Espresso</strong> : le défi difficile du jour (par ≥ 5). <strong>Latte</strong> : le défi facile (par 2–4). <strong>Illimité</strong> : jouez librement, sans limite.</p>
         <p>Un <strong>conseil</strong> vous indique une position (1 🪙) ou le mot suivant (2 🪙). Gagnez 1 🪙 en résolvant sans indice.</p>
         <p>À la résolution : 3 étoiles sans indice, 2 avec un indice, 1 sinon.</p>
-        <p><strong>Exemple d'une partie (par 4)</strong> — partez de <strong>CARTE</strong> :</p>
+        <p><strong>Exemple (par 4) — partez de CARTE :</strong></p>
         <ol class="help-steps">
           <li>CARTE &rarr; CASTE — changez le R en S</li>
           <li>CASTE &rarr; CASSE — changez le T en S</li>
@@ -201,8 +211,34 @@
           <li>CAUSE &rarr; PAUSE — changez le C en P</li>
         </ol>
         <p>Gagné en 4 coups — c'est un <strong>par 4</strong>.</p>
+        <p>Lexique : liste de mots français ouverte (<a href="https://github.com/words/an-array-of-french-words" target="_blank" rel="noopener noreferrer">an-array-of-french-words</a>), normalisée sans accents.</p>
       </div>
       <button id="help-close" class="btn btn-primary" type="button">C'est parti !</button>
+    </div>
+  </div>
+
+  <div id="definition-modal" class="modal" hidden role="dialog" aria-labelledby="definition-title" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <h2 id="definition-title">Définition du mot suivant</h2>
+      <p id="definition-text" class="definition-text" style="font-size: 1.05rem; line-height: 1.6; margin: 16px 0; color: var(--espresso); text-align: left;"></p>
+      <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 20px;">Les définitions de mots proviennent de <a href="https://www.larousse.fr/" target="_blank" rel="noopener noreferrer">Larousse.fr</a>.</p>
+      <button id="definition-close" class="btn btn-primary" type="button" style="width: 100%;">Fermer</button>
+    </div>
+  </div>
+
+  <div id="yesterday-sol-modal" class="modal" hidden role="dialog" aria-labelledby="yesterday-sol-title" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" style="max-width: 480px;">
+      <h2 id="yesterday-sol-title">Solution d'hier</h2>
+      <div class="lb-tabs" style="margin-bottom: 16px;">
+        <button id="yesterday-tab-espresso" class="lb-tab is-active" type="button">Espresso</button>
+        <button id="yesterday-tab-latte" class="lb-tab" type="button">Latte</button>
+      </div>
+      <div id="yesterday-sol-container" style="display: flex; justify-content: center; align-items: center; min-height: 200px; margin-bottom: 20px;">
+        <img id="yesterday-sol-img" alt="Solution d'hier" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      </div>
+      <button id="yesterday-sol-close" class="btn btn-secondary" type="button" style="width: 100%;">Fermer</button>
     </div>
   </div>
 

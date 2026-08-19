@@ -307,6 +307,46 @@ test('GET /auth/mock is forbidden in production unless ALLOW_MOCK_AUTH is set', 
   assert.equal(res.status, 403);
 });
 
+test('POST /auth/magic-link and GET /auth/magic-link/callback flow', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+
+  const postRes = await fetch(`${base}/auth/magic-link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'test-magic@c5m.ca' }),
+  });
+  assert.equal(postRes.status, 200);
+  const postData = await postRes.json();
+  assert.equal(postData.success, true);
+
+  const tokenRecord = db.prepare("SELECT token FROM magic_link_tokens WHERE email = 'test-magic@c5m.ca'").get();
+  assert.ok(tokenRecord);
+  const token = tokenRecord.token;
+
+  const callbackRes = await fetch(`${base}/auth/magic-link/callback?token=${token}&email=test-magic@c5m.ca`, { redirect: 'manual' });
+  assert.equal(callbackRes.status, 302);
+  assert.equal(callbackRes.headers.get('location'), '/');
+
+  const user = db.prepare("SELECT * FROM users WHERE provider = 'magic-link' AND provider_id = 'test-magic@c5m.ca'").get();
+  assert.ok(user);
+  assert.equal(user.email, 'test-magic@c5m.ca');
+
+  const tokenDeleted = db.prepare("SELECT * FROM magic_link_tokens WHERE token = ?").get(token);
+  assert.ok(!tokenDeleted);
+});
+
+test('GET /auth/magic-link/callback fails with invalid token', async (t) => {
+  const db = openDatabase(':memory:');
+  t.after(() => db.close());
+  const base = await start(t, db);
+
+  const res = await fetch(`${base}/auth/magic-link/callback?token=badtoken&email=test-magic@c5m.ca`, { redirect: 'manual' });
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get('location'), '/?auth=failed');
+});
+
 test('submitDailyScore keeps the best score per user per challenge per day', () => {
   const db = openDatabase(':memory:');
   try {
