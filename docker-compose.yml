@@ -9,6 +9,12 @@ services:
       - lapause-data:/app/data
     env_file:
       - .env
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-no-reply@exemple.com}
     restart: unless-stopped
 
 volumes:
